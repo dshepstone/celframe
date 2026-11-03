@@ -49,7 +49,7 @@ function splitTopLevel(text, separator) {
 
 function main() {
   const listing = JSON.parse(
-    execSync("pnpm licenses list --json", { encoding: "utf8" }),
+    execSync("pnpm -r licenses list --json", { encoding: "utf8" }),
   );
   const rejected = Object.entries(listing).filter(
     ([licence]) => !isAllowed(licence),
