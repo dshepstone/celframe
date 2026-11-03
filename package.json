@@ -13,7 +13,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "pnpm -r --if-present lint",
-    "test": "node --test scripts/ && pnpm -r --if-present test",
+    "test": "node --test \"scripts/*.test.mjs\" && pnpm -r --if-present test",
     "licenses:check": "node scripts/check-js-licences.mjs"
   }
 }
