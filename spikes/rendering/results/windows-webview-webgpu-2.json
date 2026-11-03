@@ -1,0 +1,82 @@
+{
+  "devicePixelRatio": 1.25,
+  "info": {
+    "adapterInfo": {
+      "architecture": "gen-9",
+      "description": "",
+      "vendor": "intel"
+    },
+    "adapterName": "",
+    "api": "webgpu",
+    "backend": "BrowserWebGpu",
+    "hasWebGpu": true
+  },
+  "ipcRoundTripMs": {
+    "max": 2.899999976158142,
+    "n": 500,
+    "p50": 1.5,
+    "p95": 2.199999988079071,
+    "p99": 2.600000023841858
+  },
+  "mode": "webview",
+  "platform": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0",
+  "runs": [
+    {
+      "eventToGpuDoneMs": {
+        "max": 9.5,
+        "n": 300,
+        "p50": 4.099999964237213,
+        "p95": 7.199999988079071,
+        "p99": 8.200000047683716
+      },
+      "eventToNextFrameMs": {
+        "max": 11.200000047683716,
+        "n": 300,
+        "p50": 7.099999964237213,
+        "p95": 10.5,
+        "p99": 11
+      },
+      "loadMs": 52.39999997615814,
+      "rustOnlyMs": null,
+      "strokes": 100
+    },
+    {
+      "eventToGpuDoneMs": {
+        "max": 7.899999976158142,
+        "n": 300,
+        "p50": 4,
+        "p95": 7,
+        "p99": 7.699999988079071
+      },
+      "eventToNextFrameMs": {
+        "max": 11.300000011920927,
+        "n": 300,
+        "p50": 7,
+        "p95": 10.300000011920927,
+        "p99": 11
+      },
+      "loadMs": 53.69999998807907,
+      "rustOnlyMs": null,
+      "strokes": 1000
+    },
+    {
+      "eventToGpuDoneMs": {
+        "max": 15.599999964237211,
+        "n": 300,
+        "p50": 8.099999964237213,
+        "p95": 12.399999976158142,
+        "p99": 14.199999988079073
+      },
+      "eventToNextFrameMs": {
+        "max": 16.5,
+        "n": 300,
+        "p50": 9.400000035762789,
+        "p95": 13.399999976158142,
+        "p99": 14.699999988079073
+      },
+      "loadMs": 409.89999997615814,
+      "rustOnlyMs": null,
+      "strokes": 10000
+    }
+  ]
+}

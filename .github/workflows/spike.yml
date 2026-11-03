@@ -1,0 +1,60 @@
+# Evidence for ADR-0001 on OSes we can't test by hand. Not a required check.
+name: Rendering spike
+
+on:
+  pull_request:
+    paths:
+      - "spikes/rendering/**"
+      - ".github/workflows/spike.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  spike:
+    name: spike (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    defaults:
+      run:
+        working-directory: spikes/rendering
+    steps:
+      - uses: actions/checkout@v5
+      - run: rustup show && rustup target add wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: spikes/rendering
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen@0.2.130
+      - name: Install Linux libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf xvfb imagemagick mesa-vulkan-drivers
+      - name: Install timeout on macOS
+        if: runner.os == 'macOS'
+        run: brew install coreutils && echo "$(brew --prefix coreutils)/libexec/gnubin" >> "$GITHUB_PATH"
+      - run: bash build.sh
+      - name: Run scripted tests
+        continue-on-error: true
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            xvfb-run -a -s "-screen 0 1280x800x24" bash ci-run.sh "$RUNNER_OS"
+          else
+            bash ci-run.sh "$RUNNER_OS"
+          fi
+      - if: always()
+        run: node summarize.mjs || true
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: spike-${{ matrix.os }}
+          path: |
+            spikes/rendering/results/
+          if-no-files-found: warn

@@ -1,0 +1,13 @@
+{
+  "productName": "celframe-rendering-spike",
+  "version": "0.0.0",
+  "identifier": "io.github.dshepstone.celframe.spike",
+  "build": { "frontendDist": "ui" },
+  "app": {
+    "withGlobalTauri": true,
+    "macOSPrivateApi": true,
+    "windows": [],
+    "security": { "csp": null }
+  },
+  "bundle": { "active": false, "icon": ["icons/icon.ico", "icons/icon.png"] }
+}

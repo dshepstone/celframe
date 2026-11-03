@@ -1,0 +1,82 @@
+{
+  "devicePixelRatio": 1.25,
+  "info": {
+    "adapterInfo": {
+      "architecture": "gen-9",
+      "description": "",
+      "vendor": "intel"
+    },
+    "adapterName": "",
+    "api": "webgpu",
+    "backend": "BrowserWebGpu",
+    "hasWebGpu": true
+  },
+  "ipcRoundTripMs": {
+    "max": 4.400000035762787,
+    "n": 500,
+    "p50": 1.399999976158142,
+    "p95": 2.300000011920929,
+    "p99": 3.199999988079071
+  },
+  "mode": "webview",
+  "platform": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0",
+  "runs": [
+    {
+      "eventToGpuDoneMs": {
+        "max": 9.599999964237211,
+        "n": 300,
+        "p50": 4.5,
+        "p95": 7.699999988079071,
+        "p99": 9.199999988079073
+      },
+      "eventToNextFrameMs": {
+        "max": 13.399999976158142,
+        "n": 300,
+        "p50": 7.599999964237213,
+        "p95": 11.399999976158142,
+        "p99": 13.199999988079073
+      },
+      "loadMs": 54.40000003576279,
+      "rustOnlyMs": null,
+      "strokes": 100
+    },
+    {
+      "eventToGpuDoneMs": {
+        "max": 11.400000035762789,
+        "n": 300,
+        "p50": 5.5,
+        "p95": 8.399999976158142,
+        "p99": 9.799999952316284
+      },
+      "eventToNextFrameMs": {
+        "max": 13.600000023841858,
+        "n": 300,
+        "p50": 8.899999976158142,
+        "p95": 12.100000023841858,
+        "p99": 13.599999964237211
+      },
+      "loadMs": 58.69999998807907,
+      "rustOnlyMs": null,
+      "strokes": 1000
+    },
+    {
+      "eventToGpuDoneMs": {
+        "max": 662.2999999523163,
+        "n": 300,
+        "p50": 331.69999998807907,
+        "p95": 629.1999999880791,
+        "p99": 653.9000000357628
+      },
+      "eventToNextFrameMs": {
+        "max": 662.3999999761581,
+        "n": 300,
+        "p50": 332,
+        "p95": 629.3000000119209,
+        "p99": 653.9000000357628
+      },
+      "loadMs": 430.60000002384186,
+      "rustOnlyMs": null,
+      "strokes": 10000
+    }
+  ]
+}
