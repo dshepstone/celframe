@@ -312,6 +312,9 @@ dependencies = [
 [[package]]
 name = "celframe-geom"
 version = "0.0.0"
+dependencies = [
+ "celframe-core",
+]
 
 [[package]]
 name = "celframe-render"

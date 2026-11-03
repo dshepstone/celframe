@@ -10,3 +10,6 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+celframe-core = { version = "0.0.0", path = "../celframe-core" }
