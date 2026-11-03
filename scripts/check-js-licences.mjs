@@ -19,16 +19,20 @@ const ALLOWED = new Set([
   "Zlib",
 ]);
 
+// Allowed only for tools that never ship in the app. See CLEANROOM.md.
+const DEV_ONLY_ALLOWED = new Set(["BlueOak-1.0.0"]);
+
 /** Handles SPDX "OR" and "AND" expressions, including one level of parentheses. */
-export function isAllowed(expression) {
+export function isAllowed(expression, extra = new Set()) {
   const text = expression.trim();
   const orParts = splitTopLevel(text, " OR ");
-  if (orParts.length > 1) return orParts.some(isAllowed);
+  if (orParts.length > 1) return orParts.some((part) => isAllowed(part, extra));
   const andParts = splitTopLevel(text, " AND ");
-  if (andParts.length > 1) return andParts.every(isAllowed);
+  if (andParts.length > 1)
+    return andParts.every((part) => isAllowed(part, extra));
   if (text.startsWith("(") && text.endsWith(")"))
-    return isAllowed(text.slice(1, -1));
-  return ALLOWED.has(text);
+    return isAllowed(text.slice(1, -1), extra);
+  return ALLOWED.has(text) || extra.has(text);
 }
 
 function splitTopLevel(text, separator) {
@@ -47,22 +51,39 @@ function splitTopLevel(text, separator) {
   return parts;
 }
 
+export function rejected(listing, extra = new Set()) {
+  return Object.entries(listing).filter(
+    ([licence]) => !isAllowed(licence, extra),
+  );
+}
+
+function list(flags) {
+  const output = execSync(`pnpm -r licenses list --json ${flags}`, {
+    encoding: "utf8",
+  });
+  return output.trim().startsWith("{") ? JSON.parse(output) : {};
+}
+
 function main() {
-  const listing = JSON.parse(
-    execSync("pnpm -r licenses list --json", { encoding: "utf8" }),
-  );
-  const rejected = Object.entries(listing).filter(
-    ([licence]) => !isAllowed(licence),
-  );
-  const total = Object.values(listing).flat().length;
-  for (const [licence, packages] of rejected) {
-    console.error(`${licence}: ${packages.map((p) => p.name).join(", ")}`);
+  const shipped = list("--prod");
+  const all = list("");
+  const failures = [
+    ...rejected(shipped).map((entry) => ["shipped", ...entry]),
+    ...rejected(all, DEV_ONLY_ALLOWED).map((entry) => ["dev", ...entry]),
+  ];
+  for (const [group, licence, packages] of failures) {
+    console.error(
+      `${group}: ${licence}: ${packages.map((p) => p.name).join(", ")}`,
+    );
   }
-  if (rejected.length > 0) {
-    console.error("These licences aren't on the allowlist. See CLEANROOM.md.");
+  if (failures.length > 0) {
+    console.error("These licences aren't allowed. See CLEANROOM.md.");
     process.exit(1);
   }
-  console.log(`${total} JS packages checked, all licences allowed.`);
+  const count = (listing) => Object.values(listing).flat().length;
+  console.log(
+    `Licences OK: ${count(shipped)} shipped packages, ${count(all)} in total.`,
+  );
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) main();

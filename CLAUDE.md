@@ -40,3 +40,4 @@ cargo nextest run --workspace
 - Stop and ask before anything irreversible, any dependency with an unusual licence, or
   anything touching the clean-room rules.
 - Stay on Tauri 2.x. Don't adopt alpha releases.
+- Stay on TypeScript 6.0.x for now: typescript-eslint doesn't support TypeScript 7 yet.
