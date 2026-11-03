@@ -63,11 +63,28 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm licenses:check
 
+  clean-room:
+    name: clean-room
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: node scripts/check-clean-room.mjs
+
+  dco:
+    name: dco
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - run: bash scripts/check-dco.sh "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
+
   # The one check branch protection requires, so the job list can change freely.
   ci-ok:
     name: ci-ok
     if: always()
-    needs: [rust, js, licences]
+    needs: [rust, js, licences, clean-room, dco]
     runs-on: ubuntu-latest
     steps:
-      - run: test "${{ needs.rust.result }}" = "success" && test "${{ needs.js.result }}" = "success" && test "${{ needs.licences.result }}" = "success"
+      - run: test "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" = "false"
