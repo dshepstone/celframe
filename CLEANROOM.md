@@ -24,7 +24,7 @@ whether written by a person or with an AI tool.
 
 ## Licence exception for dev tools
 
-BlueOak-1.0.0 is allowed only for JS packages that are used by development tools and never ship in the app, such as `minimatch` under ESLint. Anything that ships must use a licence on the main list. CI checks the two groups separately.
+BlueOak-1.0.0 and CC-BY-4.0 are allowed only for JS packages that are used by development tools and never ship in the app, such as `minimatch` under ESLint and `caniuse-lite` under build tools. Anything that ships must use a licence on the main list. CI checks the two groups separately.
 
 ## Having used other software
 

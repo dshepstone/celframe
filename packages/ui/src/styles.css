@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+/* Declares the utilities. Real values come from applyTheme() in tokens.ts. */
+@theme {
+  --color-*: initial;
+  --color-black: #000;
+  --color-surface: Canvas;
+  --color-surface-raised: Canvas;
+  --color-surface-sunken: Canvas;
+  --color-canvas-backdrop: Canvas;
+  --color-text: CanvasText;
+  --color-text-muted: CanvasText;
+  --color-text-on-accent: Canvas;
+  --color-accent: Highlight;
+  --color-accent-hover: Highlight;
+  --color-border: CanvasText;
+  --color-control-border: CanvasText;
+  --color-focus-ring: Highlight;
+  --color-danger: CanvasText;
+}
