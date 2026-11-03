@@ -15,12 +15,13 @@ pub enum SchemaCompatibility {
     Invalid,
 }
 
-pub const fn schema_compatibility(version: u32) -> SchemaCompatibility {
+/// Compares a saved version with the version a build uses, normally `SCHEMA_VERSION`.
+pub const fn schema_compatibility(version: u32, current: u32) -> SchemaCompatibility {
     if version == 0 {
         SchemaCompatibility::Invalid
-    } else if version == SCHEMA_VERSION {
+    } else if version == current {
         SchemaCompatibility::Current
-    } else if version < SCHEMA_VERSION {
+    } else if version < current {
         SchemaCompatibility::NeedsMigration
     } else {
         SchemaCompatibility::TooNew
@@ -33,14 +34,12 @@ mod tests {
 
     #[test]
     fn classifies_versions() {
-        assert_eq!(schema_compatibility(0), SchemaCompatibility::Invalid);
+        assert_eq!(schema_compatibility(0, 2), SchemaCompatibility::Invalid);
         assert_eq!(
-            schema_compatibility(SCHEMA_VERSION),
-            SchemaCompatibility::Current
+            schema_compatibility(1, 2),
+            SchemaCompatibility::NeedsMigration
         );
-        assert_eq!(
-            schema_compatibility(SCHEMA_VERSION + 1),
-            SchemaCompatibility::TooNew
-        );
+        assert_eq!(schema_compatibility(2, 2), SchemaCompatibility::Current);
+        assert_eq!(schema_compatibility(3, 2), SchemaCompatibility::TooNew);
     }
 }
