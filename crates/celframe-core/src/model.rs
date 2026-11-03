@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::ids::{DrawingId, LayerId, ProjectId, SceneId, StrokeId};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Project {
     pub id: ProjectId,
     pub name: String,
@@ -23,6 +24,7 @@ impl Project {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Scene {
     pub id: SceneId,
     pub name: String,
@@ -48,6 +50,7 @@ impl Scene {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Layer {
     pub id: LayerId,
     pub name: String,
@@ -97,6 +100,7 @@ impl Layer {
 
 /// Holds one drawing from a start frame for a number of frames.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Exposure {
     pub start_frame: u32,
     pub length: u32,
@@ -146,6 +150,7 @@ impl std::fmt::Display for ExposureError {
 impl std::error::Error for ExposureError {}
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Drawing {
     pub id: DrawingId,
     /// Bottom stroke first.
@@ -163,6 +168,7 @@ impl Drawing {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Stroke {
     pub id: StrokeId,
     /// Width in scene units at full pressure.
@@ -174,6 +180,7 @@ pub struct Stroke {
 
 /// One point on a stroke's centreline, in scene space.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StrokeSample {
     pub x: f64,
     pub y: f64,
