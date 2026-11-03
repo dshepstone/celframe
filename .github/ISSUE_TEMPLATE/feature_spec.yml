@@ -1,0 +1,30 @@
+name: Feature spec
+description: Propose a feature, in your own words
+labels: ["type:feature"]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What animators need
+      description: Describe the need from general animation knowledge, not from how another product works.
+    validations:
+      required: true
+  - type: textarea
+    id: behaviour
+    attributes:
+      label: Proposed behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: How we'll know it's done
+    validations:
+      required: true
+  - type: checkboxes
+    id: cleanroom
+    attributes:
+      label: Clean-room check
+      options:
+        - label: This proposal doesn't rely on proprietary code, formats, internals or documentation.
+          required: true

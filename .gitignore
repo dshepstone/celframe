@@ -1,0 +1,10 @@
+target/
+node_modules/
+dist/
+storybook-static/
+playwright-report/
+test-results/
+*.snap.new
+.DS_Store
+.vscode/
+.idea/
