@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::ids::{DrawingId, LayerId, SceneId, StrokeId};
-use crate::model::{Drawing, Exposure, ExposureError, Layer, Project, Scene, Stroke};
+use crate::model::{Drawing, Exposure, ExposureError, Layer, Project, Scene, Stroke, StrokeSample};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(
@@ -88,6 +88,20 @@ pub enum Command {
         layer: LayerId,
         drawing: DrawingId,
         stroke: StrokeId,
+    },
+    AppendStrokeSamples {
+        scene: SceneId,
+        layer: LayerId,
+        drawing: DrawingId,
+        stroke: StrokeId,
+        samples: Vec<StrokeSample>,
+    },
+    TruncateStrokeSamples {
+        scene: SceneId,
+        layer: LayerId,
+        drawing: DrawingId,
+        stroke: StrokeId,
+        len: usize,
     },
 }
 
@@ -296,6 +310,44 @@ impl Command {
                     index,
                 })
             }
+            Command::AppendStrokeSamples {
+                scene,
+                layer,
+                drawing,
+                stroke,
+                mut samples,
+            } => {
+                let target = find_stroke(project, scene, layer, drawing, stroke)?;
+                let len = target.samples.len();
+                target.samples.append(&mut samples);
+                Ok(Command::TruncateStrokeSamples {
+                    scene,
+                    layer,
+                    drawing,
+                    stroke,
+                    len,
+                })
+            }
+            Command::TruncateStrokeSamples {
+                scene,
+                layer,
+                drawing,
+                stroke,
+                len,
+            } => {
+                let target = find_stroke(project, scene, layer, drawing, stroke)?;
+                if len > target.samples.len() {
+                    return Err(CommandError::InvalidIndex);
+                }
+                let samples = target.samples.split_off(len);
+                Ok(Command::AppendStrokeSamples {
+                    scene,
+                    layer,
+                    drawing,
+                    stroke,
+                    samples,
+                })
+            }
         }
     }
 }
@@ -341,6 +393,20 @@ fn find_drawing(
         .drawings
         .iter_mut()
         .find(|d| d.id == id)
+        .ok_or(CommandError::NotFound)
+}
+
+fn find_stroke(
+    project: &mut Project,
+    scene: SceneId,
+    layer: LayerId,
+    drawing: DrawingId,
+    id: StrokeId,
+) -> Result<&mut Stroke, CommandError> {
+    find_drawing(project, scene, layer, drawing)?
+        .strokes
+        .iter_mut()
+        .find(|s| s.id == id)
         .ok_or(CommandError::NotFound)
 }
 

@@ -1,6 +1,7 @@
 //! Undo and redo stacks. See ADR-0003.
 
 use crate::command::{Command, CommandError};
+use crate::ids::StrokeId;
 use crate::model::Project;
 
 /// Tracks which commands reverse the edits made so far.
@@ -11,6 +12,8 @@ pub struct History {
     next_state: u64,
     current_state: u64,
     saved_state: u64,
+    /// The stroke whose appended samples merge into its original undo entry.
+    open_stroke: Option<StrokeId>,
 }
 
 /// A reversing command, and the document state that exists before it runs.
@@ -44,19 +47,53 @@ impl History {
 
     /// Applies a new edit. Redo is cleared only if the edit succeeds.
     pub fn execute(&mut self, project: &mut Project, command: Command) -> Result<(), CommandError> {
+        let merges = matches!(
+            &command,
+            Command::AppendStrokeSamples { stroke, .. } if self.open_stroke == Some(*stroke)
+        );
         let inverse = command.apply(project)?;
+        if merges {
+            // Undoing the entry that added the stroke already removes these samples.
+            self.finish_edit();
+            return Ok(());
+        }
+        self.open_stroke = None;
         self.undo.push(Entry {
             command: inverse,
             target_state: self.current_state,
         });
+        self.finish_edit();
+        Ok(())
+    }
+
+    /// Adds a stroke and merges later samples for it, until `end_stroke` or another edit.
+    pub fn begin_stroke(
+        &mut self,
+        project: &mut Project,
+        command: Command,
+    ) -> Result<(), CommandError> {
+        let stroke = match &command {
+            Command::AddStroke { stroke, .. } => Some(stroke.id),
+            _ => None,
+        };
+        self.execute(project, command)?;
+        self.open_stroke = stroke;
+        Ok(())
+    }
+
+    pub fn end_stroke(&mut self) {
+        self.open_stroke = None;
+    }
+
+    fn finish_edit(&mut self) {
         self.redo.clear();
         self.next_state += 1;
         self.current_state = self.next_state;
-        Ok(())
     }
 
     /// Returns false when there is nothing to undo.
     pub fn undo(&mut self, project: &mut Project) -> Result<bool, CommandError> {
+        self.open_stroke = None;
         Self::step(
             &mut self.undo,
             &mut self.redo,
@@ -67,6 +104,7 @@ impl History {
 
     /// Returns false when there is nothing to redo.
     pub fn redo(&mut self, project: &mut Project) -> Result<bool, CommandError> {
+        self.open_stroke = None;
         Self::step(
             &mut self.redo,
             &mut self.undo,
