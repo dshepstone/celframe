@@ -1,7 +1,13 @@
 //! `.celf` file reading and writing. The format is specified in `docs/file-format.md`.
 
+mod migrate;
+#[cfg(test)]
+mod migration_tests;
 mod validate;
 
+pub use migrate::{Migration, RawDocument};
+
+use std::collections::BTreeMap;
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Read, Seek, Write};
 use std::path::Path;
@@ -10,14 +16,15 @@ use celframe_core::{
     Project, ProjectId, SCHEMA_VERSION, Scene, SceneId, SchemaCompatibility, schema_compatibility,
 };
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
 const MANIFEST_ENTRY: &str = "project.json";
 const ASSETS_ENTRY: &str = "assets/";
 
-/// Largest JSON entry we'll decompress, so a crafted file can't exhaust memory.
-const MAX_JSON_ENTRY_BYTES: u64 = 1 << 30;
+/// Most JSON we'll decompress from one file, so a crafted file can't exhaust memory.
+const MAX_JSON_BYTES: u64 = 1 << 30;
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -59,59 +66,97 @@ pub fn write_project<W: Write + Seek>(project: &Project, writer: W) -> Result<()
     Ok(())
 }
 
-/// Reads a `.celf` archive, rejecting damaged or unsupported files.
+/// Reads a `.celf` archive, upgrading older files and rejecting damaged or unsupported ones.
 pub fn read_project<R: Read + Seek>(reader: R) -> Result<Project, FormatError> {
-    let mut archive = ZipArchive::new(reader)?;
+    read_with(reader, SCHEMA_VERSION, migrate::MIGRATIONS)
+}
 
-    let manifest: Manifest = serde_json::from_slice(&read_entry(&mut archive, MANIFEST_ENTRY)?)?;
-    match schema_compatibility(manifest.schema_version) {
-        SchemaCompatibility::Current => {}
-        SchemaCompatibility::TooNew => {
-            return Err(FormatError::TooNew(manifest.schema_version));
-        }
-        SchemaCompatibility::NeedsMigration | SchemaCompatibility::Invalid => {
-            return Err(FormatError::InvalidDocument(format!(
-                "unsupported schema version {}",
-                manifest.schema_version
-            )));
+fn read_with<R: Read + Seek>(
+    reader: R,
+    current_version: u32,
+    migrations: &[Migration],
+) -> Result<Project, FormatError> {
+    let mut archive = ZipArchive::new(reader)?;
+    let mut remaining = MAX_JSON_BYTES;
+
+    let manifest: Value =
+        serde_json::from_slice(&read_entry(&mut archive, MANIFEST_ENTRY, &mut remaining)?)?;
+    let version = manifest
+        .get("schemaVersion")
+        .and_then(Value::as_u64)
+        .and_then(|v| u32::try_from(v).ok())
+        .unwrap_or(0);
+    match schema_compatibility(version, current_version) {
+        SchemaCompatibility::Current | SchemaCompatibility::NeedsMigration => {}
+        SchemaCompatibility::TooNew => return Err(FormatError::TooNew(version)),
+        SchemaCompatibility::Invalid => {
+            return Err(FormatError::InvalidDocument(
+                "the schema version is missing or invalid".to_owned(),
+            ));
         }
     }
 
-    let mut scenes = Vec::with_capacity(manifest.scenes.len());
+    let mut scenes = BTreeMap::new();
+    for name in scene_entry_names(&mut archive)? {
+        let bytes = read_entry(&mut archive, &name, &mut remaining)?;
+        scenes.insert(name, serde_json::from_slice(&bytes)?);
+    }
+    let mut document = RawDocument { manifest, scenes };
+    migrate::migrate(&mut document, version, current_version, migrations)?;
+
+    let manifest: Manifest = serde_json::from_value(document.manifest)?;
+    let mut project_scenes = Vec::with_capacity(manifest.scenes.len());
     for id in manifest.scenes {
-        let scene: Scene = serde_json::from_slice(&read_entry(&mut archive, &scene_entry(id))?)?;
+        let name = scene_entry(id);
+        let json = document
+            .scenes
+            .remove(&name)
+            .ok_or(FormatError::MissingEntry(name))?;
+        let scene: Scene = serde_json::from_value(json)?;
         if scene.id != id {
             return Err(FormatError::InvalidDocument(
                 "a scene's ID doesn't match its entry".to_owned(),
             ));
         }
-        scenes.push(scene);
+        project_scenes.push(scene);
     }
 
     let project = Project {
         id: manifest.id,
         name: manifest.name,
-        scenes,
+        scenes: project_scenes,
     };
     validate::validate(&project)?;
     Ok(project)
 }
 
+fn scene_entry_names<R: Read + Seek>(
+    archive: &mut ZipArchive<R>,
+) -> Result<Vec<String>, FormatError> {
+    let mut names = Vec::new();
+    for index in 0..archive.len() {
+        let name = archive.by_index_raw(index)?.name()?.to_string();
+        if name.starts_with("scenes/") && name.ends_with(".json") {
+            names.push(name);
+        }
+    }
+    Ok(names)
+}
+
 fn read_entry<R: Read + Seek>(
     archive: &mut ZipArchive<R>,
     name: &str,
+    remaining: &mut u64,
 ) -> Result<Vec<u8>, FormatError> {
     let entry = archive.by_name(name).map_err(|error| match error {
         zip::result::ZipError::FileNotFound => FormatError::MissingEntry(name.to_owned()),
         other => FormatError::Zip(other),
     })?;
     let mut bytes = Vec::new();
-    entry
-        .take(MAX_JSON_ENTRY_BYTES + 1)
-        .read_to_end(&mut bytes)?;
-    if bytes.len() as u64 > MAX_JSON_ENTRY_BYTES {
-        return Err(FormatError::InvalidDocument(format!("{name} is too large")));
-    }
+    entry.take(*remaining + 1).read_to_end(&mut bytes)?;
+    *remaining = remaining
+        .checked_sub(bytes.len() as u64)
+        .ok_or_else(|| FormatError::InvalidDocument("this file's data is too large".to_owned()))?;
     Ok(bytes)
 }
 
