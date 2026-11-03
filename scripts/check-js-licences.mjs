@@ -4,6 +4,7 @@ import { execSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
 const ALLOWED = new Set([
+  "0BSD",
   "Apache-2.0",
   "BSD-2-Clause",
   "BSD-3-Clause",
@@ -20,7 +21,7 @@ const ALLOWED = new Set([
 ]);
 
 // Allowed only for tools that never ship in the app. See CLEANROOM.md.
-const DEV_ONLY_ALLOWED = new Set(["BlueOak-1.0.0"]);
+const DEV_ONLY_ALLOWED = new Set(["BlueOak-1.0.0", "CC-BY-4.0"]);
 
 /** Handles SPDX "OR" and "AND" expressions, including one level of parentheses. */
 export function isAllowed(expression, extra = new Set()) {
