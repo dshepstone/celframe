@@ -22,6 +22,10 @@ whether written by a person or with an AI tool.
 - If something seems to need knowledge of a proprietary product's internals, stop and open
   an issue labelled `cleanroom-review` before writing anything.
 
+## Licence exception for dev tools
+
+BlueOak-1.0.0 is allowed only for JS packages that are used by development tools and never ship in the app, such as `minimatch` under ESLint. Anything that ships must use a licence on the main list. CI checks the two groups separately.
+
 ## Having used other software
 
 Knowing how to animate, including having used commercial tools as an artist, doesn't
