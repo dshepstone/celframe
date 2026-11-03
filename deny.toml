@@ -30,3 +30,8 @@ unknown-git = "deny"
 
 [advisories]
 yanked = "deny"
+
+# Build-time dependency of Tauri on Linux. Approved by the maintainer for this crate only.
+[[licenses.exceptions]]
+crate = "target-lexicon"
+allow = ["Apache-2.0 WITH LLVM-exception"]
