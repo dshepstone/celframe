@@ -1,5 +1,6 @@
 import { Button, SegmentedControl, SidePanel } from "@celframe/ui";
 import { useEffect } from "react";
+import { CommandPalette } from "./CommandPalette";
 import { useApp } from "./store";
 
 const LATER = "Coming in a later phase";
@@ -10,6 +11,10 @@ export const MODES = [
   { value: "rig", label: "Rig", disabled: true, hint: LATER },
   { value: "composite", label: "Composite", disabled: true, hint: LATER },
 ];
+
+function isTextField(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement && target.matches("input, textarea");
+}
 
 export function App() {
   const {
@@ -22,11 +27,28 @@ export function App() {
     redo,
     toggleTheme,
     setSidePanelOpen,
+    setPaletteOpen,
   } = useApp();
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      const key = event.key.toLowerCase();
+      if (key === "k") {
+        event.preventDefault();
+        setPaletteOpen(true);
+      } else if (key === "z" && !isTextField(event.target)) {
+        event.preventDefault();
+        void (event.shiftKey ? redo() : undo());
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [setPaletteOpen, undo, redo]);
 
   return (
     <div className="flex h-screen flex-col bg-surface text-text">
@@ -45,6 +67,7 @@ export function App() {
           onChange={() => undefined}
         />
         <div className="flex-1" />
+        <Button onClick={() => setPaletteOpen(true)}>Commands</Button>
         <Button onClick={toggleTheme}>
           {theme === "dark" ? "Light theme" : "Dark theme"}
         </Button>
@@ -87,6 +110,7 @@ export function App() {
           {error}
         </div>
       ) : null}
+      <CommandPalette />
     </div>
   );
 }
