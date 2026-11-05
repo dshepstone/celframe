@@ -8,7 +8,12 @@ import { matches } from "./CommandPalette";
 import { useApp } from "./store";
 
 vi.mock("./backend", () => ({
-  backend: { getDocument: vi.fn(), undo: vi.fn(), redo: vi.fn() },
+  backend: {
+    getDocument: vi.fn(),
+    undo: vi.fn(),
+    redo: vi.fn(),
+    onCloseRequested: vi.fn(() => Promise.resolve(() => undefined)),
+  },
 }));
 
 const view = (canUndo: boolean): DocumentView => ({
@@ -16,6 +21,7 @@ const view = (canUndo: boolean): DocumentView => ({
   canUndo,
   canRedo: false,
   dirty: false,
+  path: null,
 });
 
 beforeEach(() => {
@@ -68,9 +74,9 @@ describe("command palette", () => {
     await openPalette();
     const selected = () =>
       screen.getByRole("option", { selected: true }).textContent;
-    expect(selected()).toContain("Undo");
+    expect(selected()).toContain("New project");
     await userEvent.keyboard("{ArrowDown}");
-    expect(selected()).toContain("Use dark theme");
+    expect(selected()).toContain("Open project");
     await userEvent.keyboard("{ArrowUp}{ArrowUp}");
     expect(selected()).toContain("Collapse side panel");
   });

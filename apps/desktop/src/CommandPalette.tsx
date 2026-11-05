@@ -27,10 +27,41 @@ export function useCommands(): PaletteCommand[] {
     sidePanelOpen,
     undo,
     redo,
+    requestFileAction,
+    save,
+    saveAs,
     toggleTheme,
     setSidePanelOpen,
   } = useApp();
   return [
+    {
+      id: "new",
+      label: "New project",
+      shortcut: "Ctrl/Cmd+N",
+      enabled: true,
+      run: () => void requestFileAction("new"),
+    },
+    {
+      id: "open",
+      label: "Open project",
+      shortcut: "Ctrl/Cmd+O",
+      enabled: true,
+      run: () => void requestFileAction("open"),
+    },
+    {
+      id: "save",
+      label: "Save",
+      shortcut: "Ctrl/Cmd+S",
+      enabled: doc !== null,
+      run: () => void save(),
+    },
+    {
+      id: "save-as",
+      label: "Save as",
+      shortcut: "Ctrl/Cmd+Shift+S",
+      enabled: doc !== null,
+      run: () => void saveAs(),
+    },
     {
       id: "undo",
       label: "Undo",

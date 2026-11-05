@@ -7,7 +7,12 @@ import { backend, type DocumentView } from "./backend";
 import { useApp } from "./store";
 
 vi.mock("./backend", () => ({
-  backend: { getDocument: vi.fn(), undo: vi.fn(), redo: vi.fn() },
+  backend: {
+    getDocument: vi.fn(),
+    undo: vi.fn(),
+    redo: vi.fn(),
+    onCloseRequested: vi.fn(() => Promise.resolve(() => undefined)),
+  },
 }));
 
 const view = (overrides: Partial<DocumentView> = {}): DocumentView => ({
@@ -19,6 +24,7 @@ const view = (overrides: Partial<DocumentView> = {}): DocumentView => ({
   canUndo: false,
   canRedo: false,
   dirty: false,
+  path: null,
   ...overrides,
 });
 
