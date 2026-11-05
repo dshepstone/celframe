@@ -45,6 +45,19 @@ impl History {
         self.saved_state = self.current_state;
     }
 
+    /// Marks the document as differing from every saved file, such as after restoring
+    /// autosaved work. Only a later save makes it clean again.
+    pub fn mark_unsaved(&mut self) {
+        // State numbers count up from 0, so this one is never reached.
+        self.saved_state = u64::MAX;
+    }
+
+    /// Identifies the current document state. It changes with every edit, undo and redo,
+    /// and returns to an earlier value only when undo or redo returns to that state.
+    pub fn revision(&self) -> u64 {
+        self.current_state
+    }
+
     /// Applies a new edit. Redo is cleared only if the edit succeeds.
     pub fn execute(&mut self, project: &mut Project, command: Command) -> Result<(), CommandError> {
         let merges = matches!(

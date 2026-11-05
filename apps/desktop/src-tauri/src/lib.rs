@@ -1,14 +1,17 @@
 //! Tauri shell. The Rust core owns the document, and the UI talks to it through these commands.
 
+mod recovery;
 mod session;
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, MutexGuard};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use celframe_core::{Command, Project};
-use session::{DocumentView, Session};
-use tauri::{AppHandle, Emitter, Manager, State, Window, WindowEvent};
+use recovery::{RecoveryInfo, RecoveryStore};
+use session::{AutosaveStep, DocumentView, Session};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, State, Window, WindowEvent};
 use tauri_plugin_dialog::{DialogExt, FileDialogBuilder, FilePath};
 
 type SharedSession = Mutex<Session>;
@@ -19,6 +22,8 @@ struct CloseConfirmed(AtomicBool);
 
 /// Sent to the UI when closing the window would discard unsaved changes.
 const CLOSE_REQUESTED: &str = "close-requested";
+
+const AUTOSAVE_INTERVAL: Duration = Duration::from_secs(30);
 
 fn lock<'a>(state: &'a State<'_, SharedSession>) -> Result<MutexGuard<'a, Session>, String> {
     state
@@ -125,6 +130,106 @@ fn close_window(window: Window, confirmed: State<'_, CloseConfirmed>) -> Result<
     window.close().map_err(|e| e.to_string())
 }
 
+/// The recovery copy left by an earlier run, while the person hasn't chosen what to do with it.
+#[tauri::command]
+fn get_recovery(
+    state: State<'_, SharedSession>,
+    store: State<'_, RecoveryStore>,
+) -> Result<Option<RecoveryInfo>, String> {
+    let pending = lock(&state)?.recovery_pending();
+    Ok(if pending { store.info() } else { None })
+}
+
+/// On failure the copy is kept and the choice stays open.
+#[tauri::command]
+fn restore_recovery(
+    state: State<'_, SharedSession>,
+    store: State<'_, RecoveryStore>,
+) -> Result<DocumentView, String> {
+    let project = store.load()?;
+    let original_path = store.info().and_then(|info| info.original_path);
+    Ok(lock(&state)?.restore(project, original_path))
+}
+
+#[tauri::command]
+fn discard_recovery(
+    state: State<'_, SharedSession>,
+    store: State<'_, RecoveryStore>,
+) -> Result<(), String> {
+    store
+        .clear()
+        .map_err(|error| format!("Couldn't delete the unsaved work: {error}"))?;
+    lock(&state)?.set_recovery_pending(false);
+    Ok(())
+}
+
+/// One autosave check. The project is written outside the lock so editing never waits on disk.
+fn autosave_tick(app: &AppHandle) {
+    let session = app.state::<SharedSession>();
+    let store = app.state::<RecoveryStore>();
+    let Ok(step) = session.lock().map(|mut s| s.autosave_step()) else {
+        return;
+    };
+    match step {
+        AutosaveStep::Nothing => {}
+        AutosaveStep::Write(project, original_path) => {
+            let info = RecoveryInfo {
+                original_path,
+                saved_at_ms: now_ms(),
+            };
+            if let Err(error) = store.write(&project, &info) {
+                eprintln!("autosave failed: {error}");
+                if let Ok(mut session) = session.lock() {
+                    session.autosave_failed();
+                }
+            }
+        }
+        AutosaveStep::Clear => {
+            if let Err(error) = store.clear() {
+                eprintln!("couldn't remove the recovery copy: {error}");
+            }
+        }
+    }
+}
+
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
+}
+
+fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    let store = RecoveryStore::new(app.path().app_data_dir()?.join("recovery"));
+    let mut session = Session::new(Project::new("Untitled"));
+    session.set_recovery_pending(store.info().is_some());
+    app.manage(Mutex::new(session));
+    app.manage(store);
+
+    let handle = app.handle().clone();
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(AUTOSAVE_INTERVAL);
+            autosave_tick(&handle);
+        }
+    });
+    Ok(())
+}
+
+fn on_run_event(app: &AppHandle, event: RunEvent) {
+    if !matches!(event, RunEvent::Exit) {
+        return;
+    }
+    // Some exits skip the close prompt, such as quitting from the macOS menu. Unsaved work
+    // then keeps its recovery copy unless the person chose to discard it.
+    let discarded = app.state::<CloseConfirmed>().0.load(Ordering::SeqCst);
+    let clear = app.state::<SharedSession>().lock().is_ok_and(|session| {
+        session.should_clear_recovery_on_exit() && (discarded || !session.is_dirty())
+    });
+    if clear && let Err(error) = app.state::<RecoveryStore>().clear() {
+        eprintln!("couldn't remove the recovery copy: {error}");
+    }
+}
+
 fn on_window_event(window: &Window, event: &WindowEvent) {
     let WindowEvent::CloseRequested { api, .. } = event else {
         return;
@@ -145,8 +250,8 @@ fn on_window_event(window: &Window, event: &WindowEvent) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .manage(Mutex::new(Session::new(Project::new("Untitled"))))
         .manage(CloseConfirmed::default())
+        .setup(setup)
         .on_window_event(on_window_event)
         .invoke_handler(tauri::generate_handler![
             get_document,
@@ -157,8 +262,12 @@ pub fn run() {
             open_document,
             save_document,
             save_document_as,
-            close_window
+            close_window,
+            get_recovery,
+            restore_recovery,
+            discard_recovery
         ])
-        .run(tauri::generate_context!())
-        .expect("the app failed to start");
+        .build(tauri::generate_context!())
+        .expect("the app failed to start")
+        .run(on_run_event);
 }

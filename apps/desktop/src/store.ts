@@ -1,6 +1,6 @@
 import { applyTheme, type ThemeName } from "@celframe/ui";
 import { create } from "zustand";
-import { backend, type DocumentView } from "./backend";
+import { backend, type DocumentView, type RecoveryInfo } from "./backend";
 
 const THEME_KEY = "celframe.theme";
 
@@ -38,12 +38,16 @@ export interface AppState {
   error: string | null;
   /** Waiting on the unsaved-changes prompt. */
   pendingAction: FileAction | null;
+  /** Unsaved work from an earlier run, waiting for Restore or Discard. */
+  recovery: RecoveryInfo | null;
   theme: ThemeName;
   sidePanelOpen: boolean;
   paletteOpen: boolean;
   load: () => Promise<void>;
   undo: () => Promise<void>;
   redo: () => Promise<void>;
+  restoreRecovery: () => Promise<void>;
+  discardRecovery: () => Promise<void>;
   requestFileAction: (action: FileAction) => Promise<void>;
   resolvePending: (choice: UnsavedChoice) => Promise<void>;
   save: () => Promise<void>;
@@ -86,10 +90,30 @@ export const useApp = create<AppState>((set, get) => {
     document: null,
     error: null,
     pendingAction: null,
+    recovery: null,
     theme: "light",
     sidePanelOpen: true,
     paletteOpen: false,
-    load: () => sync(backend.getDocument()).then(() => undefined),
+    load: async () => {
+      await sync(backend.getDocument());
+      try {
+        set({ recovery: await backend.getRecovery() });
+      } catch (error) {
+        set({ error: String(error) });
+      }
+    },
+    // On failure the prompt stays open, so the person can still discard the copy.
+    restoreRecovery: async () => {
+      if (await sync(backend.restoreRecovery())) set({ recovery: null });
+    },
+    discardRecovery: async () => {
+      try {
+        await backend.discardRecovery();
+        set({ recovery: null, error: null });
+      } catch (error) {
+        set({ error: String(error) });
+      }
+    },
     undo: () => sync(backend.undo()).then(() => undefined),
     redo: () => sync(backend.redo()).then(() => undefined),
     requestFileAction: async (action) => {

@@ -79,3 +79,30 @@ fn commands_cross_ipc_as_tagged_json() {
     assert_eq!(json, r#"{"type":"renameProject","name":"B"}"#);
     assert_eq!(serde_json::from_str::<Command>(&json).unwrap(), rename("B"));
 }
+
+#[test]
+fn mark_unsaved_stays_dirty_until_the_next_save() {
+    let mut project = Project::new("A");
+    let mut history = History::new();
+    history.mark_unsaved();
+    assert!(history.is_dirty());
+    history.execute(&mut project, rename("B")).unwrap();
+    history.undo(&mut project).unwrap();
+    assert!(history.is_dirty());
+    history.mark_saved();
+    assert!(!history.is_dirty());
+}
+
+#[test]
+fn revision_changes_with_edits_and_returns_with_undo() {
+    let mut project = Project::new("A");
+    let mut history = History::new();
+    let start = history.revision();
+    history.execute(&mut project, rename("B")).unwrap();
+    let edited = history.revision();
+    assert_ne!(edited, start);
+    history.undo(&mut project).unwrap();
+    assert_eq!(history.revision(), start);
+    history.redo(&mut project).unwrap();
+    assert_eq!(history.revision(), edited);
+}
