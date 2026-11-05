@@ -1,4 +1,6 @@
-use celframe_core::{Drawing, DrawingId, Exposure, ExposureError, Layer, Project, Scene, StrokeId};
+use celframe_core::{
+    Drawing, DrawingId, Exposure, ExposureError, Layer, Project, Scene, Stroke, StrokeId,
+};
 
 fn layer_with_two_exposures() -> (Layer, DrawingId, DrawingId) {
     let mut layer = Layer::new("Ink");
@@ -99,4 +101,43 @@ fn scene_serializes_and_round_trips() {
     let scene = Scene::new("Shot 1");
     let json = serde_json::to_string(&scene).unwrap();
     assert_eq!(serde_json::from_str::<Scene>(&json).unwrap(), scene);
+}
+
+fn stroke() -> Stroke {
+    Stroke {
+        id: StrokeId::new(),
+        base_width: 1.0,
+        color: [0, 0, 0, 255],
+        samples: Vec::new(),
+    }
+}
+
+/// A layer showing one drawing, holding the given strokes, from frame 0 for 10 frames.
+fn layer_showing(strokes: Vec<Stroke>) -> Layer {
+    let mut layer = Layer::new("Ink");
+    let mut drawing = Drawing::new();
+    drawing.strokes = strokes;
+    let id = drawing.id;
+    layer.drawings.push(drawing);
+    layer.insert_exposure(Exposure::new(0, 10, id)).unwrap();
+    layer
+}
+
+#[test]
+fn visible_strokes_are_bottom_layer_first_and_skip_hidden_or_empty_layers() {
+    let (a, b, c, d) = (stroke(), stroke(), stroke(), stroke());
+    let ids = [a.id, b.id, c.id, d.id];
+    let mut hidden = layer_showing(vec![c]);
+    hidden.visible = false;
+    let mut scene = Scene::new("Shot");
+    scene.layers = vec![
+        layer_showing(vec![a, b]),
+        hidden,
+        Layer::new("Nothing exposed"),
+        layer_showing(vec![d]),
+    ];
+
+    let shown: Vec<StrokeId> = scene.visible_strokes(3).map(|s| s.id).collect();
+    assert_eq!(shown, [ids[0], ids[1], ids[3]]);
+    assert_eq!(scene.visible_strokes(10).count(), 0);
 }

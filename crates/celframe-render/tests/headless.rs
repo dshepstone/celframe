@@ -1,7 +1,7 @@
 use std::f64::consts::FRAC_PI_2;
 
 use celframe_core::{Stroke, StrokeId, StrokeSample};
-use celframe_render::{Image, Renderer, View};
+use celframe_render::{Canvas, Image, Paper, Renderer, View};
 
 const WHITE: [u8; 4] = [255, 255, 255, 255];
 const BLACK: [u8; 4] = [0, 0, 0, 255];
@@ -44,7 +44,7 @@ fn render(strokes: &[Stroke], view: View) -> Option<Image> {
     let mut renderer = renderer()?;
     Some(
         renderer
-            .render_image(strokes, &view, SIZE, SIZE, WHITE)
+            .render_image(strokes, &view, &Canvas::full(SIZE, SIZE, WHITE))
             .unwrap(),
     )
 }
@@ -115,7 +115,7 @@ fn the_view_zooms_pans_and_rotates() {
     };
     let mut draw = |view: View| {
         renderer
-            .render_image(&[horizontal()], &view, SIZE, SIZE, WHITE)
+            .render_image(&[horizontal()], &view, &Canvas::full(SIZE, SIZE, WHITE))
             .unwrap()
     };
 
@@ -177,10 +177,10 @@ fn rendering_is_repeatable() {
         rotation: 0.2,
     };
     let first = renderer
-        .render_image(&strokes, &view, SIZE, SIZE, WHITE)
+        .render_image(&strokes, &view, &Canvas::full(SIZE, SIZE, WHITE))
         .unwrap();
     let second = renderer
-        .render_image(&strokes, &view, SIZE, SIZE, WHITE)
+        .render_image(&strokes, &view, &Canvas::full(SIZE, SIZE, WHITE))
         .unwrap();
     assert_eq!(first, second);
 }
@@ -192,7 +192,11 @@ fn odd_sizes_read_back_correctly() {
         return;
     };
     let image = renderer
-        .render_image(&[], &View::default(), 37, 5, [10, 20, 30, 255])
+        .render_image(
+            &[],
+            &View::default(),
+            &Canvas::full(37, 5, [10, 20, 30, 255]),
+        )
         .unwrap();
     assert_eq!(image.pixels.len(), 37 * 5 * 4);
     assert!(image.pixels.chunks(4).all(|p| p == [10, 20, 30, 255]));
@@ -205,7 +209,66 @@ fn zero_sized_images_are_refused() {
     };
     assert!(
         renderer
-            .render_image(&[], &View::default(), 0, 10, WHITE)
+            .render_image(&[], &View::default(), &Canvas::full(0, 10, WHITE))
             .is_err()
     );
+}
+
+const GREY: [u8; 4] = [200, 200, 200, 255];
+
+#[test]
+fn paper_is_drawn_behind_strokes_with_the_backdrop_around_it() {
+    let Some(mut renderer) = renderer() else {
+        return;
+    };
+    let canvas = Canvas {
+        paper: Some(Paper::scene_frame(40, 30, WHITE)),
+        ..Canvas::full(SIZE, SIZE, GREY)
+    };
+    let image = renderer
+        .render_image(&[horizontal()], &View::default(), &canvas)
+        .unwrap();
+    // The paper covers columns 12 to 51 and rows 17 to 46.
+    assert_eq!(image.pixel(2, 2), GREY);
+    assert_eq!(image.pixel(32, 20), WHITE);
+    assert_eq!(image.pixel(32, 32), BLACK);
+    assert_eq!(image.pixel(32, 50), GREY);
+}
+
+#[test]
+fn only_the_viewport_shows_the_scene() {
+    let Some(mut renderer) = renderer() else {
+        return;
+    };
+    // The right half of a 128 × 64 target.
+    let canvas = Canvas {
+        target_size: [128, 64],
+        viewport: [64, 0, 64, 64],
+        backdrop: GREY,
+        paper: Some(Paper::scene_frame(1000, 1000, WHITE)),
+    };
+    let image = renderer
+        .render_image(&[horizontal()], &View::default(), &canvas)
+        .unwrap();
+    // The view centre is the middle of the viewport, column 96.
+    assert_eq!(image.pixel(96, 32), BLACK);
+    assert_eq!(image.pixel(66, 10), WHITE);
+    // The paper is clipped to the viewport, so the left half stays backdrop.
+    assert_eq!(image.pixel(32, 32), GREY);
+    assert_eq!(image.pixel(60, 10), GREY);
+}
+
+#[test]
+fn a_viewport_outside_the_target_draws_only_the_backdrop() {
+    let Some(mut renderer) = renderer() else {
+        return;
+    };
+    let canvas = Canvas {
+        viewport: [500, 500, 10, 10],
+        ..Canvas::full(SIZE, SIZE, GREY)
+    };
+    let image = renderer
+        .render_image(&[horizontal()], &View::default(), &canvas)
+        .unwrap();
+    assert!(image.pixels.chunks(4).all(|p| p == GREY));
 }

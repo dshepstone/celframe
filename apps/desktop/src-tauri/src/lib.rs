@@ -1,5 +1,6 @@
 //! Tauri shell. The Rust core owns the document, and the UI talks to it through these commands.
 
+mod canvas;
 mod recovery;
 mod session;
 
@@ -8,6 +9,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, MutexGuard};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use canvas::{CanvasLayout, WindowCanvas};
 use celframe_core::{Command, Project};
 use recovery::{RecoveryInfo, RecoveryStore};
 use session::{AutosaveStep, DocumentView, Session};
@@ -15,6 +17,10 @@ use tauri::{AppHandle, Emitter, Manager, RunEvent, State, Window, WindowEvent};
 use tauri_plugin_dialog::{DialogExt, FileDialogBuilder, FilePath};
 
 type SharedSession = Mutex<Session>;
+
+/// The native canvas, or `None` if the GPU couldn't start. The app still works without it.
+#[derive(Default)]
+struct CanvasState(Mutex<Option<WindowCanvas>>);
 
 /// Set once the person has chosen to close despite unsaved changes.
 #[derive(Default)]
@@ -29,6 +35,30 @@ fn lock<'a>(state: &'a State<'_, SharedSession>) -> Result<MutexGuard<'a, Sessio
     state
         .lock()
         .map_err(|_| "the document is unavailable after an earlier error".to_owned())
+}
+
+/// Draws the open scene into the window. Locks the session, then the canvas: always in that order.
+fn redraw(app: &AppHandle) {
+    let session = app.state::<SharedSession>();
+    let Ok(session) = session.lock() else {
+        return;
+    };
+    let Some(scene) = session.project().scenes.first() else {
+        return;
+    };
+    if let Ok(mut canvas) = app.state::<CanvasState>().0.lock()
+        && let Some(canvas) = canvas.as_mut()
+    {
+        canvas.render(scene);
+    }
+}
+
+/// Redraws after a command that may have changed the document.
+fn redrawn<T>(app: &AppHandle, result: Result<T, String>) -> Result<T, String> {
+    if result.is_ok() {
+        redraw(app);
+    }
+    result
 }
 
 fn celf_dialog(app: &AppHandle) -> FileDialogBuilder<tauri::Wry> {
@@ -49,26 +79,50 @@ fn get_document(state: State<'_, SharedSession>) -> Result<DocumentView, String>
 
 #[tauri::command]
 fn execute_command(
+    app: AppHandle,
     state: State<'_, SharedSession>,
     command: Command,
 ) -> Result<DocumentView, String> {
-    lock(&state)?.execute(command).map_err(|e| e.to_string())
+    let result = lock(&state)?.execute(command).map_err(|e| e.to_string());
+    redrawn(&app, result)
 }
 
 #[tauri::command]
-fn undo(state: State<'_, SharedSession>) -> Result<DocumentView, String> {
-    lock(&state)?.undo().map_err(|e| e.to_string())
+fn undo(app: AppHandle, state: State<'_, SharedSession>) -> Result<DocumentView, String> {
+    let result = lock(&state)?.undo().map_err(|e| e.to_string());
+    redrawn(&app, result)
 }
 
 #[tauri::command]
-fn redo(state: State<'_, SharedSession>) -> Result<DocumentView, String> {
-    lock(&state)?.redo().map_err(|e| e.to_string())
+fn redo(app: AppHandle, state: State<'_, SharedSession>) -> Result<DocumentView, String> {
+    let result = lock(&state)?.redo().map_err(|e| e.to_string());
+    redrawn(&app, result)
 }
 
 /// The UI asks about unsaved changes before calling this.
 #[tauri::command]
-fn new_document(state: State<'_, SharedSession>) -> Result<DocumentView, String> {
-    Ok(lock(&state)?.new_document())
+fn new_document(app: AppHandle, state: State<'_, SharedSession>) -> Result<DocumentView, String> {
+    let view = lock(&state)?.new_document();
+    redrawn(&app, Ok(view))
+}
+
+/// Tells the canvas where to draw. Returns false when there is no native canvas, so the UI
+/// keeps its own opaque backdrop instead of showing an undrawn window through it.
+#[tauri::command]
+fn set_canvas_layout(
+    app: AppHandle,
+    canvas: State<'_, CanvasState>,
+    layout: CanvasLayout,
+) -> Result<bool, String> {
+    {
+        let mut canvas = canvas.0.lock().map_err(|_| "the canvas is unavailable")?;
+        let Some(canvas) = canvas.as_mut() else {
+            return Ok(false);
+        };
+        canvas.set_layout(layout);
+    }
+    redraw(&app);
+    Ok(true)
 }
 
 // File pickers block, so the commands that show one are async and run off the main thread.
@@ -83,7 +137,8 @@ async fn open_document(
         return Ok(None);
     };
     let path = into_path(file)?;
-    lock(&state)?.open(&path).map(Some)
+    let result = lock(&state)?.open(&path).map(Some);
+    redrawn(&app, result)
 }
 
 /// Saves to the project's file, or asks for one if it has never been saved.
@@ -143,12 +198,14 @@ fn get_recovery(
 /// On failure the copy is kept and the choice stays open.
 #[tauri::command]
 fn restore_recovery(
+    app: AppHandle,
     state: State<'_, SharedSession>,
     store: State<'_, RecoveryStore>,
 ) -> Result<DocumentView, String> {
     let project = store.load()?;
     let original_path = store.info().and_then(|info| info.original_path);
-    Ok(lock(&state)?.restore(project, original_path))
+    let view = lock(&state)?.restore(project, original_path);
+    redrawn(&app, Ok(view))
 }
 
 #[tauri::command]
@@ -205,6 +262,17 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(Mutex::new(session));
     app.manage(store);
 
+    // Without a GPU the app still opens: the UI keeps an opaque backdrop over the canvas area.
+    let canvas = app
+        .get_webview_window("main")
+        .ok_or_else(|| "the main window is missing".to_owned())
+        .and_then(|window| WindowCanvas::new(&window));
+    match &canvas {
+        Ok(canvas) => eprintln!("canvas: drawing with {}", canvas.adapter_name()),
+        Err(error) => eprintln!("canvas: unavailable: {error}"),
+    }
+    app.manage(CanvasState(Mutex::new(canvas.ok())));
+
     let handle = app.handle().clone();
     std::thread::spawn(move || {
         loop {
@@ -231,6 +299,15 @@ fn on_run_event(app: &AppHandle, event: RunEvent) {
 }
 
 fn on_window_event(window: &Window, event: &WindowEvent) {
+    if let WindowEvent::Resized(size) = event {
+        if let Ok(mut canvas) = window.state::<CanvasState>().0.lock()
+            && let Some(canvas) = canvas.as_mut()
+        {
+            canvas.resize(size.width, size.height);
+        }
+        redraw(window.app_handle());
+        return;
+    }
     let WindowEvent::CloseRequested { api, .. } = event else {
         return;
     };
@@ -265,7 +342,8 @@ pub fn run() {
             close_window,
             get_recovery,
             restore_recovery,
-            discard_recovery
+            discard_recovery,
+            set_canvas_layout
         ])
         .build(tauri::generate_context!())
         .expect("the app failed to start")

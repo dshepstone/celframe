@@ -36,6 +36,16 @@ pub struct Scene {
 }
 
 impl Scene {
+    /// Strokes shown at a frame, bottom first: each visible layer's exposed drawing, in layer
+    /// order. Hidden layers and layers with nothing exposed draw nothing.
+    pub fn visible_strokes(&self, frame: u32) -> impl Iterator<Item = &Stroke> {
+        self.layers
+            .iter()
+            .filter(|layer| layer.visible)
+            .filter_map(move |layer| layer.drawing_at(frame))
+            .flat_map(|drawing| drawing.strokes.iter())
+    }
+
     /// Creates a 1920 × 1080, 24 fps scene with one empty layer.
     pub fn new(name: impl Into<String>) -> Self {
         Self {
