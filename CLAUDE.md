@@ -12,8 +12,8 @@ never name them in the repo. If something seems to need their internals, stop an
 - The Rust core is the single source of truth. The UI sends commands through Tauri IPC and
   renders the state it gets back.
 - All edits are commands that can be undone.
-- Rendering direction is undecided until ADR-0001 is approved. Don't build on either option
-  before then.
+- Rendering is native wgpu under a transparent webview ([ADR-0001](docs/adr/0001-rendering.md)).
+  The webview stays transparent over the canvas area.
 
 ## Layout
 
