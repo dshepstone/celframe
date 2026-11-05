@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* Apps import this file through node_modules, which Tailwind doesn't scan, so name the
+   components' own folder or their classes are never generated. */
+@source "./";
+
 /* Declares the utilities. Real values come from applyTheme() in tokens.ts. */
 @theme {
   --color-*: initial;
