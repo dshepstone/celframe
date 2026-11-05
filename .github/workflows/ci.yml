@@ -12,6 +12,9 @@ jobs:
   rust:
     name: rust (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    env:
+      # Renderer tests fail instead of skipping when no graphics adapter is found.
+      CELFRAME_REQUIRE_GPU: "1"
     strategy:
       fail-fast: false
       matrix:
@@ -22,7 +25,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Install Linux libraries for Tauri
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+        # mesa-vulkan-drivers gives the renderer tests a software GPU.
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf mesa-vulkan-drivers
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v5
         with:
