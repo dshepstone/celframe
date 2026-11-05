@@ -2,6 +2,7 @@ import { Button, SegmentedControl, SidePanel } from "@celframe/ui";
 import { useEffect } from "react";
 import { backend } from "./backend";
 import { CommandPalette } from "./CommandPalette";
+import { RecoveryDialog } from "./RecoveryDialog";
 import { useApp } from "./store";
 import { UnsavedChangesDialog } from "./UnsavedChangesDialog";
 
@@ -130,6 +131,7 @@ export function App() {
       ) : null}
       <CommandPalette />
       <UnsavedChangesDialog />
+      <RecoveryDialog />
     </div>
   );
 }

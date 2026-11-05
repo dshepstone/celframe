@@ -17,6 +17,12 @@ export interface DocumentView {
   path: string | null;
 }
 
+/** A recovery copy left by a run that didn't exit normally. */
+export interface RecoveryInfo {
+  originalPath: string | null;
+  savedAtMs: number;
+}
+
 export const backend = {
   getDocument: () => invoke<DocumentView>("get_document"),
   undo: () => invoke<DocumentView>("undo"),
@@ -26,6 +32,11 @@ export const backend = {
   openDocument: () => invoke<DocumentView | null>("open_document"),
   saveDocument: () => invoke<DocumentView | null>("save_document"),
   saveDocumentAs: () => invoke<DocumentView | null>("save_document_as"),
+  getRecovery: () => invoke<RecoveryInfo | null>("get_recovery"),
+  restoreRecovery: () => invoke<DocumentView>("restore_recovery"),
+  discardRecovery: async (): Promise<void> => {
+    await invoke("discard_recovery");
+  },
   closeWindow: async (): Promise<void> => {
     await invoke("close_window");
   },

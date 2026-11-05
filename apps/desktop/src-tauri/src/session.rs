@@ -9,6 +9,30 @@ pub struct Session {
     project: Project,
     history: History,
     path: Option<PathBuf>,
+    autosave: AutosaveState,
+    /// A recovery copy from an earlier run is waiting for the person to restore or discard it.
+    recovery_pending: bool,
+}
+
+/// What the recovery copy on disk holds, as far as this session knows.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum AutosaveState {
+    /// No copy written by this session.
+    None,
+    /// A copy of this document at this history revision.
+    Written(u64),
+    /// A copy that is out of date or belongs to a replaced document.
+    Stale,
+}
+
+/// What the autosave timer should do next.
+#[derive(Debug, PartialEq)]
+pub enum AutosaveStep {
+    Nothing,
+    /// Write this project as the recovery copy. The path is its own file, if any.
+    Write(Project, Option<PathBuf>),
+    /// Remove the recovery copy.
+    Clear,
 }
 
 /// What the UI renders. It is always replaced as a whole, never edited in the UI.
@@ -29,6 +53,18 @@ impl Session {
             project,
             history: History::new(),
             path: None,
+            autosave: AutosaveState::None,
+            recovery_pending: false,
+        }
+    }
+
+    /// Swaps in another project with a fresh history, keeping track of the recovery copy.
+    fn replace(&mut self, project: Project, path: Option<PathBuf>) {
+        self.project = project;
+        self.history = History::new();
+        self.path = path;
+        if self.autosave != AutosaveState::None {
+            self.autosave = AutosaveState::Stale;
         }
     }
 
@@ -71,7 +107,7 @@ impl Session {
 
     /// Replaces the project with an empty, unsaved one.
     pub fn new_document(&mut self) -> DocumentView {
-        *self = Self::new(Project::new("Untitled"));
+        self.replace(Project::new("Untitled"), None);
         self.view()
     }
 
@@ -79,8 +115,7 @@ impl Session {
     pub fn open(&mut self, path: &Path) -> Result<DocumentView, String> {
         let project = celframe_format::load_project(path)
             .map_err(|error| format!("Couldn't open {}: {error}", display_name(path)))?;
-        *self = Self::new(project);
-        self.path = Some(path.to_owned());
+        self.replace(project, Some(path.to_owned()));
         Ok(self.view())
     }
 
@@ -104,6 +139,55 @@ impl Session {
             ));
         }
         self.save_to(&path)
+    }
+}
+
+impl Session {
+    pub fn set_recovery_pending(&mut self, pending: bool) {
+        self.recovery_pending = pending;
+    }
+
+    pub fn recovery_pending(&self) -> bool {
+        self.recovery_pending
+    }
+
+    /// Opens restored work as unsaved changes to its original file, if it had one.
+    pub fn restore(&mut self, project: Project, original_path: Option<PathBuf>) -> DocumentView {
+        self.replace(project, original_path);
+        self.history.mark_unsaved();
+        // The copy on disk is the one being restored, so rewrite it at the next step.
+        self.autosave = AutosaveState::Stale;
+        self.recovery_pending = false;
+        self.view()
+    }
+
+    /// Decides what autosave does now. Call `autosave_failed` if a write fails.
+    pub fn autosave_step(&mut self) -> AutosaveStep {
+        if self.recovery_pending {
+            return AutosaveStep::Nothing;
+        }
+        let revision = self.history.revision();
+        match (self.history.is_dirty(), self.autosave) {
+            (true, AutosaveState::Written(written)) if written == revision => AutosaveStep::Nothing,
+            (true, _) => {
+                self.autosave = AutosaveState::Written(revision);
+                AutosaveStep::Write(self.project.clone(), self.path.clone())
+            }
+            (false, AutosaveState::None) => AutosaveStep::Nothing,
+            (false, _) => {
+                self.autosave = AutosaveState::None;
+                AutosaveStep::Clear
+            }
+        }
+    }
+
+    pub fn autosave_failed(&mut self) {
+        self.autosave = AutosaveState::Stale;
+    }
+
+    /// True when exiting should remove the recovery copy.
+    pub fn should_clear_recovery_on_exit(&self) -> bool {
+        !self.recovery_pending
     }
 }
 
@@ -250,6 +334,79 @@ mod tests {
         let error = session.open(&bad).unwrap_err();
         assert!(error.starts_with("Couldn't open broken.celf: "), "{error}");
         assert_eq!(session.view(), before);
+    }
+
+    fn write_step(session: &mut Session) -> Project {
+        match session.autosave_step() {
+            AutosaveStep::Write(project, _) => project,
+            other => panic!("expected a write, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn autosave_writes_each_new_revision_once_and_clears_when_clean() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut session = Session::new(Project::new("A"));
+        assert_eq!(session.autosave_step(), AutosaveStep::Nothing);
+
+        session.execute(rename("B")).unwrap();
+        assert_eq!(write_step(&mut session).name, "B");
+        assert_eq!(session.autosave_step(), AutosaveStep::Nothing);
+
+        session.execute(rename("C")).unwrap();
+        assert_eq!(write_step(&mut session).name, "C");
+
+        session.save_to(&dir.path().join("a.celf")).unwrap();
+        assert_eq!(session.autosave_step(), AutosaveStep::Clear);
+        assert_eq!(session.autosave_step(), AutosaveStep::Nothing);
+
+        // Undoing past the save is unsaved work again.
+        session.undo().unwrap();
+        assert_eq!(write_step(&mut session).name, "B");
+    }
+
+    #[test]
+    fn autosave_retries_after_a_failed_write() {
+        let mut session = Session::new(Project::new("A"));
+        session.execute(rename("B")).unwrap();
+        write_step(&mut session);
+        session.autosave_failed();
+        assert_eq!(write_step(&mut session).name, "B");
+    }
+
+    #[test]
+    fn replacing_the_document_clears_its_copy_even_at_a_matching_revision() {
+        let mut session = Session::new(Project::new("A"));
+        session.execute(rename("B")).unwrap();
+        write_step(&mut session);
+
+        session.new_document();
+        assert_eq!(session.autosave_step(), AutosaveStep::Clear);
+
+        // A new document's revisions start again, so they must not match the old copy.
+        session.execute(rename("Fresh")).unwrap();
+        assert_eq!(write_step(&mut session).name, "Fresh");
+    }
+
+    #[test]
+    fn a_pending_recovery_blocks_autosave_until_restored() {
+        let mut session = Session::new(Project::new("Untitled"));
+        session.set_recovery_pending(true);
+        session.execute(rename("B")).unwrap();
+        assert_eq!(session.autosave_step(), AutosaveStep::Nothing);
+        assert!(!session.should_clear_recovery_on_exit());
+
+        let view = session.restore(Project::new("Recovered"), Some("ball.celf".into()));
+        assert!(view.dirty && !view.can_undo);
+        assert_eq!(view.path, Some(PathBuf::from("ball.celf")));
+        assert!(session.should_clear_recovery_on_exit());
+        match session.autosave_step() {
+            AutosaveStep::Write(project, path) => {
+                assert_eq!(project.name, "Recovered");
+                assert_eq!(path, Some(PathBuf::from("ball.celf")));
+            }
+            other => panic!("expected a write, got {other:?}"),
+        }
     }
 
     #[test]
