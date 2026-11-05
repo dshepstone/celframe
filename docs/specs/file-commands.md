@@ -34,7 +34,9 @@ Before New, Open or closing the window discards unsaved changes, the app asks:
 ## Saving
 
 - Saves are atomic, as `docs/file-format.md` describes: a failed save leaves the old file intact.
-- A Save As path with no extension gets `.celf`.
+- A Save As path with no extension gets `.celf`. If a file with that new name already exists,
+  the save is refused rather than replacing a file the person didn't pick.
+- Save writes to the project's file at exactly its path, even if it has no extension.
 - After a successful save, undo history is kept and the project is clean.
 
 ## Opening
