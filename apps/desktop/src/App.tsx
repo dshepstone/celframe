@@ -5,6 +5,7 @@ import { CommandPalette } from "./CommandPalette";
 import { RecoveryDialog } from "./RecoveryDialog";
 import { useApp } from "./store";
 import { UnsavedChangesDialog } from "./UnsavedChangesDialog";
+import { useNativeCanvas } from "./useNativeCanvas";
 
 const LATER = "Coming in a later phase";
 
@@ -35,6 +36,8 @@ export function App() {
     setSidePanelOpen,
     setPaletteOpen,
   } = useApp();
+
+  const [canvasRef, nativeCanvas] = useNativeCanvas<HTMLElement>(theme);
 
   useEffect(() => {
     void load();
@@ -70,8 +73,9 @@ export function App() {
   }, [setPaletteOpen, undo, redo, save, saveAs, requestFileAction]);
 
   return (
-    <div className="flex h-screen flex-col bg-surface text-text">
-      <header className="flex items-center gap-4 border-b border-border px-4 py-2">
+    // No background here: the canvas area must stay see-through for the native canvas.
+    <div className="flex h-screen flex-col text-text">
+      <header className="flex items-center gap-4 border-b border-border bg-surface px-4 py-2">
         <h1 className="text-base font-semibold tracking-tight">
           {doc?.project.name ?? "Celframe"}
           {doc?.dirty ? (
@@ -108,8 +112,12 @@ export function App() {
 
       <div className="flex min-h-0 flex-1">
         <main
+          ref={canvasRef}
           aria-label="Canvas"
-          className="flex flex-1 items-center justify-center bg-canvas-backdrop"
+          data-native-canvas={nativeCanvas}
+          className={`flex flex-1 items-center justify-center ${
+            nativeCanvas ? "bg-transparent" : "bg-canvas-backdrop"
+          }`}
         />
         <SidePanel
           title="Scene"

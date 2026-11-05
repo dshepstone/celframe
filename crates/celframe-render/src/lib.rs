@@ -85,6 +85,59 @@ impl Image {
     }
 }
 
+/// Where a frame is drawn on its target, and what surrounds the strokes.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Canvas {
+    /// The whole target texture, in pixels.
+    pub target_size: [u32; 2],
+    /// The part of the target that shows the scene, as `[x, y, width, height]` in pixels from
+    /// the top left. The view's centre is at its middle.
+    pub viewport: [u32; 4],
+    /// Fills the whole target, around and behind the paper.
+    pub backdrop: [u8; 4],
+    /// The scene frame, drawn behind the strokes.
+    pub paper: Option<Paper>,
+}
+
+impl Canvas {
+    /// A canvas that uses the whole target, with no paper.
+    pub fn full(width: u32, height: u32, backdrop: [u8; 4]) -> Self {
+        Self {
+            target_size: [width, height],
+            viewport: [0, 0, width, height],
+            backdrop,
+            paper: None,
+        }
+    }
+
+    /// The viewport, trimmed to fit inside the target.
+    fn clamped_viewport(&self) -> [u32; 4] {
+        let [tw, th] = self.target_size;
+        let [x, y, w, h] = self.viewport;
+        let (x, y) = (x.min(tw), y.min(th));
+        [x, y, w.min(tw - x), h.min(th - y)]
+    }
+}
+
+/// A rectangle in scene space, such as the scene frame.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Paper {
+    /// `[min x, min y, max x, max y]` in scene units.
+    pub rect: [f64; 4],
+    pub color: [u8; 4],
+}
+
+impl Paper {
+    /// The frame of a scene of this size, centred on the origin as the units spec says.
+    pub fn scene_frame(width: u32, height: u32, color: [u8; 4]) -> Self {
+        let (w, h) = (f64::from(width) / 2.0, f64::from(height) / 2.0);
+        Self {
+            rect: [-w, -h, w, h],
+            color,
+        }
+    }
+}
+
 /// Draws strokes with wgpu. One renderer holds one GPU device.
 pub struct Renderer {
     device: wgpu::Device,
@@ -179,15 +232,24 @@ impl Renderer {
         &self.device
     }
 
+    /// Sends recorded work to the GPU.
+    pub fn submit(&self, encoder: wgpu::CommandEncoder) {
+        self.queue.submit([encoder.finish()]);
+    }
+
+    /// Shows a finished window frame.
+    pub fn present(&self, frame: wgpu::SurfaceTexture) {
+        self.queue.present(frame);
+    }
+
     /// Draws strokes into a new offscreen image and reads its pixels back.
     pub fn render_image<'a>(
         &mut self,
         strokes: impl IntoIterator<Item = &'a Stroke>,
         view: &View,
-        width: u32,
-        height: u32,
-        background: [u8; 4],
+        canvas: &Canvas,
     ) -> Result<Image, RenderError> {
+        let [width, height] = canvas.target_size;
         let max = self.device.limits().max_texture_dimension_2d;
         if width == 0 || height == 0 || width > max || height > max {
             return Err(RenderError::BadSize { width, height });
@@ -208,15 +270,7 @@ impl Renderer {
         });
         let target = texture.create_view(&Default::default());
         let mut encoder = self.device.create_command_encoder(&Default::default());
-        self.draw(
-            &mut encoder,
-            &target,
-            IMAGE_FORMAT,
-            [width, height],
-            strokes,
-            view,
-            background,
-        );
+        self.draw(&mut encoder, &target, IMAGE_FORMAT, canvas, strokes, view);
 
         // Rows in a buffer copy must start on 256-byte boundaries.
         let row_bytes = width * 4;
@@ -275,34 +329,37 @@ impl Renderer {
         })
     }
 
-    /// Records a frame that clears `target` and draws the strokes on it. The window renderer
-    /// shares this with headless rendering.
-    #[allow(clippy::too_many_arguments)]
+    /// Records a frame that clears `target` and draws the paper and strokes on it. The window
+    /// renderer shares this with headless rendering.
     pub fn draw<'a>(
         &mut self,
         encoder: &mut wgpu::CommandEncoder,
         target: &wgpu::TextureView,
         format: wgpu::TextureFormat,
-        size: [u32; 2],
+        canvas: &Canvas,
         strokes: impl IntoIterator<Item = &'a Stroke>,
         view: &View,
-        background: [u8; 4],
     ) {
-        let tolerance = view.tolerance();
+        let size = canvas.target_size;
+        let viewport = canvas.clamped_viewport();
         self.mesh.clear();
         self.vertex_bytes.clear();
+        if let Some(paper) = canvas.paper {
+            let [x0, y0, x1, y1] = paper.rect.map(|v| v as f32);
+            self.mesh
+                .positions
+                .extend([[x0, y0], [x1, y0], [x1, y1], [x0, y1]]);
+            self.mesh.indices.extend([0, 1, 2, 0, 2, 3]);
+            self.push_vertex_colors(0, paper.color);
+        }
+        let tolerance = view.tolerance();
         for stroke in strokes {
             let first = self.mesh.positions.len();
             tessellate_stroke(stroke, tolerance, &mut self.mesh);
-            let color = premultiplied(stroke.color);
-            for position in &self.mesh.positions[first..] {
-                for value in position.iter().chain(&color) {
-                    self.vertex_bytes.extend_from_slice(&value.to_ne_bytes());
-                }
-            }
+            self.push_vertex_colors(first, stroke.color);
         }
 
-        let matrix = view.clip_matrix([f64::from(size[0]), f64::from(size[1])]);
+        let matrix = view.clip_matrix([f64::from(viewport[2]), f64::from(viewport[3])]);
         let mut uniform_bytes = Vec::with_capacity(32);
         for row in matrix {
             for value in row.iter().chain(&[0.0]) {
@@ -344,7 +401,7 @@ impl Renderer {
             .create_view(&Default::default());
 
         let pipeline = self.pipeline(format).clone();
-        let [r, g, b, a] = premultiplied(background).map(f64::from);
+        let [r, g, b, a] = premultiplied(canvas.backdrop).map(f64::from);
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("strokes"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -361,13 +418,26 @@ impl Renderer {
             occlusion_query_set: None,
             multiview_mask: None,
         });
-        if let Some((vertices, indices)) = &buffers {
+        let [vx, vy, vw, vh] = viewport;
+        if let Some((vertices, indices)) = buffers.as_ref().filter(|_| vw > 0 && vh > 0) {
+            pass.set_viewport(vx as f32, vy as f32, vw as f32, vh as f32, 0.0, 1.0);
+            pass.set_scissor_rect(vx, vy, vw, vh);
             pass.set_pipeline(&pipeline);
             pass.set_bind_group(0, &self.bind_group, &[]);
             pass.set_vertex_buffer(0, vertices.slice(..));
             pass.set_index_buffer(indices.slice(..), wgpu::IndexFormat::Uint32);
             let count = u32::try_from(self.mesh.indices.len()).unwrap_or(u32::MAX);
             pass.draw_indexed(0..count, 0, 0..1);
+        }
+    }
+
+    /// Writes vertex data for positions from `first` on, all in one colour.
+    fn push_vertex_colors(&mut self, first: usize, color: [u8; 4]) {
+        let color = premultiplied(color);
+        for position in &self.mesh.positions[first..] {
+            for value in position.iter().chain(&color) {
+                self.vertex_bytes.extend_from_slice(&value.to_ne_bytes());
+            }
         }
     }
 

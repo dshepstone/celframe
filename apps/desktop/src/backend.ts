@@ -23,6 +23,17 @@ export interface RecoveryInfo {
   savedAtMs: number;
 }
 
+/** Where the canvas area is, in CSS pixels, and the colour around the paper. */
+export interface CanvasLayout {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** Device pixels per CSS pixel. */
+  scale: number;
+  backdrop: [number, number, number, number];
+}
+
 export const backend = {
   getDocument: () => invoke<DocumentView>("get_document"),
   undo: () => invoke<DocumentView>("undo"),
@@ -37,6 +48,9 @@ export const backend = {
   discardRecovery: async (): Promise<void> => {
     await invoke("discard_recovery");
   },
+  /** Resolves false when there is no native canvas to show through the page. */
+  setCanvasLayout: (layout: CanvasLayout) =>
+    invoke<boolean>("set_canvas_layout", { layout }),
   closeWindow: async (): Promise<void> => {
     await invoke("close_window");
   },

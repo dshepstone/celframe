@@ -82,6 +82,10 @@ impl Session {
         self.path.as_deref()
     }
 
+    pub fn project(&self) -> &Project {
+        &self.project
+    }
+
     pub fn project_name(&self) -> &str {
         &self.project.name
     }

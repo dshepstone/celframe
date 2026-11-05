@@ -9,6 +9,7 @@ import { useApp } from "./store";
 vi.mock("./backend", () => ({
   backend: {
     getDocument: vi.fn(),
+    setCanvasLayout: vi.fn(() => Promise.resolve(false)),
     getRecovery: vi.fn(() => Promise.resolve(null)),
     undo: vi.fn(),
     redo: vi.fn(),

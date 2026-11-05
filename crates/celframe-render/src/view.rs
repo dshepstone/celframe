@@ -62,6 +62,22 @@ impl View {
         [row(sx, cos, -sin), row(sy, sin, cos)]
     }
 
+    /// A view that shows all of `rect` (`[min x, min y, max x, max y]` in scene units), centred
+    /// on a canvas of `size` pixels, filling `fill` of the canvas along the tighter direction.
+    pub fn fit(rect: [f64; 4], size: [f64; 2], fill: f64) -> Self {
+        let (width, height) = (rect[2] - rect[0], rect[3] - rect[1]);
+        let zoom = (size[0] / width).min(size[1] / height) * fill;
+        Self {
+            centre: [(rect[0] + rect[2]) / 2.0, (rect[1] + rect[3]) / 2.0],
+            zoom: if zoom.is_finite() && zoom > 0.0 {
+                zoom
+            } else {
+                1.0
+            },
+            rotation: 0.0,
+        }
+    }
+
     /// The largest curve error, in scene units, that stays under a quarter of a screen pixel.
     pub fn tolerance(&self) -> f32 {
         (0.25 / self.zoom) as f32
@@ -108,6 +124,20 @@ mod tests {
             let back = v.screen_to_scene(v.scene_to_screen(point, SIZE), SIZE);
             assert!(close(back, point), "{back:?} vs {point:?}");
         }
+    }
+
+    #[test]
+    fn fit_shows_the_whole_rect_in_the_middle() {
+        // A 1920 × 1080 scene on a 1000 × 1000 canvas is limited by its width.
+        let v = View::fit([-960.0, -540.0, 960.0, 540.0], [1000.0, 1000.0], 0.9);
+        assert!((v.zoom - 900.0 / 1920.0).abs() < 1e-12);
+        assert!(close(
+            v.scene_to_screen([960.0, 0.0], [1000.0, 1000.0]),
+            [950.0, 500.0]
+        ));
+
+        // An empty canvas still gives a usable view.
+        assert_eq!(View::fit([0.0, 0.0, 10.0, 10.0], [0.0, 0.0], 0.9).zoom, 1.0);
     }
 
     #[test]
