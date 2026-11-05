@@ -115,7 +115,7 @@ async fn save_document_as(
         return Ok(None);
     };
     let path = into_path(file)?;
-    lock(&state)?.save_to(&path).map(Some)
+    lock(&state)?.save_as(&path).map(Some)
 }
 
 /// Closes the window, discarding unsaved changes. The UI asks first.

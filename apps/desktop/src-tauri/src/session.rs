@@ -84,14 +84,26 @@ impl Session {
         Ok(self.view())
     }
 
-    /// Saves to `path`, which becomes the project's file. History is kept.
+    /// Saves to exactly `path`, which becomes the project's file. History is kept.
     pub fn save_to(&mut self, path: &Path) -> Result<DocumentView, String> {
-        let path = with_celf_extension(path);
-        celframe_format::save_project(&self.project, &path)
-            .map_err(|error| format!("Couldn't save {}: {error}", display_name(&path)))?;
+        celframe_format::save_project(&self.project, path)
+            .map_err(|error| format!("Couldn't save {}: {error}", display_name(path)))?;
         self.history.mark_saved();
-        self.path = Some(path);
+        self.path = Some(path.to_owned());
         Ok(self.view())
+    }
+
+    /// Saves to a path chosen in Save As, adding `.celf` if it has no extension.
+    pub fn save_as(&mut self, chosen: &Path) -> Result<DocumentView, String> {
+        let path = with_celf_extension(chosen);
+        // The picker only confirmed replacing `chosen`, not a file we named for it.
+        if path != chosen && path.exists() {
+            return Err(format!(
+                "Couldn't save {}: a file with that name already exists. Choose it in Save As to replace it.",
+                display_name(&path)
+            ));
+        }
+        self.save_to(&path)
     }
 }
 
@@ -185,12 +197,45 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let mut session = Session::new(Project::new("A"));
 
-        let view = session.save_to(&dir.path().join("plain")).unwrap();
+        let view = session.save_as(&dir.path().join("plain")).unwrap();
         assert_eq!(view.path, Some(dir.path().join("plain.celf")));
         assert!(dir.path().join("plain.celf").is_file());
 
-        let view = session.save_to(&dir.path().join("kept.backup")).unwrap();
+        let view = session.save_as(&dir.path().join("kept.backup")).unwrap();
         assert_eq!(view.path, Some(dir.path().join("kept.backup")));
+    }
+
+    #[test]
+    fn save_as_never_replaces_a_file_the_picker_did_not_confirm() {
+        let dir = tempfile::tempdir().unwrap();
+        let existing = dir.path().join("plain.celf");
+        std::fs::write(&existing, b"someone else's file").unwrap();
+        let mut session = Session::new(Project::new("A"));
+        session.execute(rename("B")).unwrap();
+
+        let error = session.save_as(&dir.path().join("plain")).unwrap_err();
+        assert!(error.contains("plain.celf"), "{error}");
+        assert_eq!(std::fs::read(&existing).unwrap(), b"someone else's file");
+        assert!(session.view().dirty);
+
+        // Choosing the existing file itself is a confirmed replace.
+        assert!(!session.save_as(&existing).unwrap().dirty);
+    }
+
+    #[test]
+    fn save_keeps_the_exact_path_of_a_file_with_no_extension() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("no-extension");
+        let mut session = Session::new(Project::new("A"));
+        session.save_to(&path).unwrap();
+        session.open(&path).unwrap();
+        session.execute(rename("B")).unwrap();
+
+        let view = session.save_to(&path).unwrap();
+        assert_eq!(view.path, Some(path.clone()));
+        assert!(!dir.path().join("no-extension.celf").exists());
+        let mut other = Session::new(Project::new("Other"));
+        assert_eq!(other.open(&path).unwrap().project.name, "B");
     }
 
     #[test]
