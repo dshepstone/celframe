@@ -1,7 +1,9 @@
 import { Button, SegmentedControl, SidePanel } from "@celframe/ui";
 import { useEffect } from "react";
+import { backend } from "./backend";
 import { CommandPalette } from "./CommandPalette";
 import { useApp } from "./store";
+import { UnsavedChangesDialog } from "./UnsavedChangesDialog";
 
 const LATER = "Coming in a later phase";
 
@@ -25,6 +27,9 @@ export function App() {
     load,
     undo,
     redo,
+    requestFileAction,
+    save,
+    saveAs,
     toggleTheme,
     setSidePanelOpen,
     setPaletteOpen,
@@ -33,6 +38,13 @@ export function App() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    const unlisten = backend.onCloseRequested(
+      () => void requestFileAction("close"),
+    );
+    return () => void unlisten.then((stop) => stop());
+  }, [requestFileAction]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -44,11 +56,17 @@ export function App() {
       } else if (key === "z" && !isTextField(event.target)) {
         event.preventDefault();
         void (event.shiftKey ? redo() : undo());
+      } else if (key === "s") {
+        event.preventDefault();
+        void (event.shiftKey ? saveAs() : save());
+      } else if ((key === "n" || key === "o") && !event.shiftKey) {
+        event.preventDefault();
+        void requestFileAction(key === "n" ? "new" : "open");
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [setPaletteOpen, undo, redo]);
+  }, [setPaletteOpen, undo, redo, save, saveAs, requestFileAction]);
 
   return (
     <div className="flex h-screen flex-col bg-surface text-text">
@@ -111,6 +129,7 @@ export function App() {
         </div>
       ) : null}
       <CommandPalette />
+      <UnsavedChangesDialog />
     </div>
   );
 }
