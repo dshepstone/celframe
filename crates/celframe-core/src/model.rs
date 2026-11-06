@@ -13,6 +13,20 @@ pub struct Project {
 }
 
 impl Project {
+    /// A new project as the app creates it: like `new`, but the first layer already shows an
+    /// empty drawing at frame 0, so the first stroke is a single undoable edit.
+    pub fn starter(name: impl Into<String>) -> Self {
+        let mut project = Self::new(name);
+        let layer = &mut project.scenes[0].layers[0];
+        let drawing = Drawing::new();
+        let exposure = Exposure::new(0, 1, drawing.id);
+        layer.drawings.push(drawing);
+        layer
+            .insert_exposure(exposure)
+            .expect("a new layer has room for one exposure");
+        project
+    }
+
     /// Creates a project with one default scene.
     pub fn new(name: impl Into<String>) -> Self {
         Self {

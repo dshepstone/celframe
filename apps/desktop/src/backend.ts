@@ -34,6 +34,13 @@ export interface CanvasLayout {
   backdrop: [number, number, number, number];
 }
 
+/** A pointer position in CSS pixels from the window's top left, with pen pressure. */
+export interface PointerSample {
+  x: number;
+  y: number;
+  pressure: number;
+}
+
 export const backend = {
   getDocument: () => invoke<DocumentView>("get_document"),
   undo: () => invoke<DocumentView>("undo"),
@@ -51,6 +58,13 @@ export const backend = {
   /** Resolves false when there is no native canvas to show through the page. */
   setCanvasLayout: (layout: CanvasLayout) =>
     invoke<boolean>("set_canvas_layout", { layout }),
+  penDown: async (sample: PointerSample): Promise<void> => {
+    await invoke("pen_down", { sample });
+  },
+  penMove: async (samples: PointerSample[]): Promise<void> => {
+    await invoke("pen_move", { samples });
+  },
+  penUp: () => invoke<DocumentView>("pen_up"),
   closeWindow: async (): Promise<void> => {
     await invoke("close_window");
   },

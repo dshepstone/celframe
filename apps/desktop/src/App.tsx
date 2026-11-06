@@ -6,6 +6,7 @@ import { RecoveryDialog } from "./RecoveryDialog";
 import { useApp } from "./store";
 import { UnsavedChangesDialog } from "./UnsavedChangesDialog";
 import { useNativeCanvas } from "./useNativeCanvas";
+import { usePenInput } from "./usePenInput";
 
 const LATER = "Coming in a later phase";
 
@@ -38,6 +39,7 @@ export function App() {
   } = useApp();
 
   const [canvasRef, nativeCanvas] = useNativeCanvas<HTMLElement>(theme);
+  usePenInput(canvasRef, nativeCanvas);
 
   useEffect(() => {
     void load();
@@ -115,8 +117,10 @@ export function App() {
           ref={canvasRef}
           aria-label="Canvas"
           data-native-canvas={nativeCanvas}
-          className={`flex flex-1 items-center justify-center ${
-            nativeCanvas ? "bg-transparent" : "bg-canvas-backdrop"
+          className={`flex flex-1 touch-none items-center justify-center ${
+            nativeCanvas
+              ? "cursor-crosshair bg-transparent"
+              : "bg-canvas-backdrop"
           }`}
         />
         <SidePanel

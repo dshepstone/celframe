@@ -56,6 +56,38 @@ pub fn frame_for(scene: &Scene, layout: &CanvasLayout, target_size: [u32; 2]) ->
     (canvas, view)
 }
 
+/// Converts pointer positions on the canvas to scene space, with the view the canvas draws.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Mapping {
+    layout: CanvasLayout,
+    viewport: [u32; 4],
+    view: View,
+}
+
+impl Mapping {
+    pub fn new(scene: &Scene, layout: &CanvasLayout) -> Self {
+        // The target size doesn't affect the view, only where the viewport sits.
+        let (canvas, view) = frame_for(scene, layout, [u32::MAX, u32::MAX]);
+        Self {
+            layout: *layout,
+            viewport: canvas.viewport,
+            view,
+        }
+    }
+
+    /// A point in CSS pixels from the window's top left, as pointer events report it.
+    pub fn scene_point(&self, x: f64, y: f64) -> [f64; 2] {
+        let [vx, vy, vw, vh] = self.viewport.map(f64::from);
+        let device = [x * self.layout.scale - vx, y * self.layout.scale - vy];
+        self.view.screen_to_scene(device, [vw, vh])
+    }
+
+    /// Half a device pixel, in scene units: samples closer than this are dropped.
+    pub fn min_distance(&self) -> f64 {
+        0.5 / self.view.zoom
+    }
+}
+
 pub struct WindowCanvas {
     renderer: Renderer,
     surface: wgpu::Surface<'static>,
@@ -128,6 +160,10 @@ impl WindowCanvas {
         self.layout = Some(layout);
     }
 
+    pub fn layout(&self) -> Option<CanvasLayout> {
+        self.layout
+    }
+
     /// Draws a scene's frame 0 and presents it. Does nothing until the UI has sent a layout.
     pub fn render(&mut self, scene: &Scene) {
         let Some(layout) = self.layout else {
@@ -182,6 +218,37 @@ mod tests {
         assert_eq!(layout(1.0).viewport(), [10, 20, 301, 200]);
         // 125% scaling: 13.125 to 388.4375 across, 25 to 275 down.
         assert_eq!(layout(1.25).viewport(), [13, 25, 376, 250]);
+    }
+
+    #[test]
+    fn pointer_positions_map_to_where_the_canvas_draws_them() {
+        let scene = Scene::new("Shot");
+        let layout = CanvasLayout {
+            x: 0.0,
+            y: 100.0,
+            width: 1000.0,
+            height: 600.0,
+            scale: 2.0,
+            backdrop: [0, 0, 0, 255],
+        };
+        let mapping = Mapping::new(&scene, &layout);
+        let (canvas, view) = frame_for(&scene, &layout, [4000, 4000]);
+        let [vx, vy, vw, vh] = canvas.viewport.map(f64::from);
+
+        // The middle of the canvas area is the scene origin.
+        let middle = mapping.scene_point(500.0, 400.0);
+        assert!(
+            middle[0].abs() < 1e-9 && middle[1].abs() < 1e-9,
+            "{middle:?}"
+        );
+
+        // Drawing a point back through the view lands on the same pointer position.
+        let point = mapping.scene_point(123.0, 456.5);
+        let screen = view.scene_to_screen(point, [vw, vh]);
+        assert!((screen[0] + vx - 246.0).abs() < 1e-9);
+        assert!((screen[1] + vy - 913.0).abs() < 1e-9);
+
+        assert!((mapping.min_distance() - 0.5 / view.zoom).abs() < 1e-12);
     }
 
     #[test]
