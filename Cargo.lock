@@ -342,6 +342,7 @@ version = "0.0.0"
 dependencies = [
  "celframe-core",
  "celframe-format",
+ "celframe-geom",
  "celframe-render",
  "pollster",
  "serde",

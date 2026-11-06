@@ -18,6 +18,7 @@ tauri-build = { version = "2.7.4", features = [] }
 [dependencies]
 celframe-core = { path = "../../../crates/celframe-core" }
 celframe-format = { path = "../../../crates/celframe-format" }
+celframe-geom = { path = "../../../crates/celframe-geom" }
 celframe-render = { path = "../../../crates/celframe-render" }
 pollster = "1.0.1"
 serde = { version = "1.0.229", features = ["derive"] }

@@ -1,6 +1,7 @@
 //! Tauri shell. The Rust core owns the document, and the UI talks to it through these commands.
 
 mod canvas;
+mod pen;
 mod recovery;
 mod session;
 
@@ -9,9 +10,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, MutexGuard};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use canvas::{CanvasLayout, WindowCanvas};
-use celframe_core::{Command, Project};
+use canvas::{CanvasLayout, Mapping, WindowCanvas};
+use celframe_core::{Command, Project, StrokeSample};
 use recovery::{RecoveryInfo, RecoveryStore};
+use serde::Deserialize;
 use session::{AutosaveStep, DocumentView, Session};
 use tauri::{AppHandle, Emitter, Manager, RunEvent, State, Window, WindowEvent};
 use tauri_plugin_dialog::{DialogExt, FileDialogBuilder, FilePath};
@@ -104,6 +106,80 @@ fn redo(app: AppHandle, state: State<'_, SharedSession>) -> Result<DocumentView,
 fn new_document(app: AppHandle, state: State<'_, SharedSession>) -> Result<DocumentView, String> {
     let view = lock(&state)?.new_document();
     redrawn(&app, Ok(view))
+}
+
+/// A pointer sample in CSS pixels from the window's top left.
+#[derive(Clone, Copy, Debug, Deserialize)]
+struct PointerSample {
+    x: f64,
+    y: f64,
+    pressure: f32,
+}
+
+/// The current pointer-to-scene mapping. Call with the session locked, keeping the lock order.
+fn mapping(session: &Session, canvas: &CanvasState) -> Result<Mapping, String> {
+    let scene = session
+        .project()
+        .scenes
+        .first()
+        .ok_or("The project has no scene to draw in.")?;
+    let canvas = canvas.0.lock().map_err(|_| "the canvas is unavailable")?;
+    let layout = canvas
+        .as_ref()
+        .and_then(|canvas| canvas.layout())
+        .ok_or("The canvas isn't ready to draw on.")?;
+    Ok(Mapping::new(scene, &layout))
+}
+
+fn to_scene(mapping: &Mapping, sample: PointerSample) -> StrokeSample {
+    let [x, y] = mapping.scene_point(sample.x, sample.y);
+    StrokeSample {
+        x,
+        y,
+        pressure: sample.pressure,
+    }
+}
+
+// The pen commands are synchronous, so they run in the order the UI sends them.
+
+#[tauri::command]
+fn pen_down(
+    app: AppHandle,
+    state: State<'_, SharedSession>,
+    canvas: State<'_, CanvasState>,
+    sample: PointerSample,
+) -> Result<(), String> {
+    {
+        let mut session = lock(&state)?;
+        let mapping = mapping(&session, &canvas)?;
+        session.pen_down(to_scene(&mapping, sample), mapping.min_distance())?;
+    }
+    redraw(&app);
+    Ok(())
+}
+
+#[tauri::command]
+fn pen_move(
+    app: AppHandle,
+    state: State<'_, SharedSession>,
+    canvas: State<'_, CanvasState>,
+    samples: Vec<PointerSample>,
+) -> Result<(), String> {
+    {
+        let mut session = lock(&state)?;
+        let mapping = mapping(&session, &canvas)?;
+        let samples: Vec<StrokeSample> =
+            samples.into_iter().map(|s| to_scene(&mapping, s)).collect();
+        session.pen_move(&samples)?;
+    }
+    redraw(&app);
+    Ok(())
+}
+
+#[tauri::command]
+fn pen_up(app: AppHandle, state: State<'_, SharedSession>) -> Result<DocumentView, String> {
+    let result = lock(&state)?.pen_up();
+    redrawn(&app, result)
 }
 
 /// Tells the canvas where to draw. Returns false when there is no native canvas, so the UI
@@ -257,7 +333,7 @@ fn now_ms() -> u64 {
 
 fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let store = RecoveryStore::new(app.path().app_data_dir()?.join("recovery"));
-    let mut session = Session::new(Project::new("Untitled"));
+    let mut session = Session::new(Project::starter("Untitled"));
     session.set_recovery_pending(store.info().is_some());
     app.manage(Mutex::new(session));
     app.manage(store);
@@ -343,7 +419,10 @@ pub fn run() {
             get_recovery,
             restore_recovery,
             discard_recovery,
-            set_canvas_layout
+            set_canvas_layout,
+            pen_down,
+            pen_move,
+            pen_up
         ])
         .build(tauri::generate_context!())
         .expect("the app failed to start")

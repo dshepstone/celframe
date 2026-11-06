@@ -2,7 +2,9 @@
 
 use std::path::{Path, PathBuf};
 
-use celframe_core::{Command, CommandError, History, Project};
+use celframe_core::{Command, CommandError, Drawing, Exposure, History, Project, StrokeSample};
+
+use crate::pen::{self, PenStroke};
 use serde::Serialize;
 
 pub struct Session {
@@ -12,6 +14,8 @@ pub struct Session {
     autosave: AutosaveState,
     /// A recovery copy from an earlier run is waiting for the person to restore or discard it.
     recovery_pending: bool,
+    /// The stroke being drawn, if the pen is down.
+    pen: Option<PenStroke>,
 }
 
 /// What the recovery copy on disk holds, as far as this session knows.
@@ -55,6 +59,7 @@ impl Session {
             path: None,
             autosave: AutosaveState::None,
             recovery_pending: false,
+            pen: None,
         }
     }
 
@@ -63,6 +68,7 @@ impl Session {
         self.project = project;
         self.history = History::new();
         self.path = path;
+        self.pen = None;
         if self.autosave != AutosaveState::None {
             self.autosave = AutosaveState::Stale;
         }
@@ -95,23 +101,27 @@ impl Session {
     }
 
     pub fn execute(&mut self, command: Command) -> Result<DocumentView, CommandError> {
+        // Any other edit ends a stroke in progress, as it does in the history.
+        self.pen = None;
         self.history.execute(&mut self.project, command)?;
         Ok(self.view())
     }
 
     pub fn undo(&mut self) -> Result<DocumentView, CommandError> {
+        self.pen = None;
         self.history.undo(&mut self.project)?;
         Ok(self.view())
     }
 
     pub fn redo(&mut self) -> Result<DocumentView, CommandError> {
+        self.pen = None;
         self.history.redo(&mut self.project)?;
         Ok(self.view())
     }
 
     /// Replaces the project with an empty, unsaved one.
     pub fn new_document(&mut self) -> DocumentView {
-        self.replace(Project::new("Untitled"), None);
+        self.replace(Project::starter("Untitled"), None);
         self.view()
     }
 
@@ -192,6 +202,136 @@ impl Session {
     /// True when exiting should remove the recovery copy.
     pub fn should_clear_recovery_on_exit(&self) -> bool {
         !self.recovery_pending
+    }
+}
+
+impl Session {
+    /// Starts a stroke at a scene-space sample. `min_distance` is in scene units.
+    pub fn pen_down(&mut self, sample: StrokeSample, min_distance: f64) -> Result<(), String> {
+        if self.pen.is_some() {
+            self.pen_up()?;
+        }
+        let first = pen::clean(sample).ok_or("That pen position isn't valid.")?;
+        let (scene, layer, drawing) =
+            pen::find_target(&self.project, 0).ok_or("Show or unlock a layer to draw on it.")?;
+        let drawing = match drawing {
+            Some(drawing) => drawing,
+            None => self.add_drawing_at_frame_0(scene, layer)?,
+        };
+        let index = self
+            .project
+            .scenes
+            .iter()
+            .find(|s| s.id == scene)
+            .and_then(|s| s.layers.iter().find(|l| l.id == layer))
+            .and_then(|l| l.drawings.iter().find(|d| d.id == drawing))
+            .map_or(0, |d| d.strokes.len());
+        let (pen, stroke) = PenStroke::start((scene, layer, drawing), first, min_distance);
+        let command = Command::AddStroke {
+            scene,
+            layer,
+            drawing,
+            stroke,
+            index,
+        };
+        self.history
+            .begin_stroke(&mut self.project, command)
+            .map_err(|e| e.to_string())?;
+        self.pen = Some(pen);
+        Ok(())
+    }
+
+    /// Adds scene-space samples to the stroke in progress. Ignored when the pen isn't down.
+    pub fn pen_move(&mut self, samples: &[StrokeSample]) -> Result<(), String> {
+        let Some(pen) = self.pen.as_mut() else {
+            return Ok(());
+        };
+        let samples = pen.push(samples);
+        self.append(samples)
+    }
+
+    /// Ends the stroke in progress, if any.
+    pub fn pen_up(&mut self) -> Result<DocumentView, String> {
+        if let Some(pen) = self.pen.take() {
+            let target = (pen.scene, pen.layer, pen.drawing, pen.stroke);
+            let samples = pen.finish();
+            self.append_to(target, samples)?;
+            self.history.end_stroke();
+        }
+        Ok(self.view())
+    }
+
+    fn append(&mut self, samples: Vec<StrokeSample>) -> Result<(), String> {
+        let Some(pen) = self.pen.as_ref() else {
+            return Ok(());
+        };
+        let target = (pen.scene, pen.layer, pen.drawing, pen.stroke);
+        let result = self.append_to(target, samples);
+        if result.is_err() {
+            self.pen = None;
+        }
+        result
+    }
+
+    fn append_to(
+        &mut self,
+        (scene, layer, drawing, stroke): (
+            celframe_core::SceneId,
+            celframe_core::LayerId,
+            celframe_core::DrawingId,
+            celframe_core::StrokeId,
+        ),
+        samples: Vec<StrokeSample>,
+    ) -> Result<(), String> {
+        if samples.is_empty() {
+            return Ok(());
+        }
+        let command = Command::AppendStrokeSamples {
+            scene,
+            layer,
+            drawing,
+            stroke,
+            samples,
+        };
+        // The history merges this into the stroke's own undo step.
+        self.history
+            .execute(&mut self.project, command)
+            .map_err(|e| e.to_string())
+    }
+
+    fn add_drawing_at_frame_0(
+        &mut self,
+        scene: celframe_core::SceneId,
+        layer: celframe_core::LayerId,
+    ) -> Result<celframe_core::DrawingId, String> {
+        let drawing = Drawing::new();
+        let id = drawing.id;
+        let index = self
+            .project
+            .scenes
+            .iter()
+            .find(|s| s.id == scene)
+            .and_then(|s| s.layers.iter().find(|l| l.id == layer))
+            .map_or(0, |l| l.drawings.len());
+        let commands = [
+            Command::AddDrawing {
+                scene,
+                layer,
+                drawing,
+                index,
+            },
+            Command::InsertExposure {
+                scene,
+                layer,
+                exposure: Exposure::new(0, 1, id),
+            },
+        ];
+        for command in commands {
+            self.history
+                .execute(&mut self.project, command)
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(id)
     }
 }
 
@@ -411,6 +551,134 @@ mod tests {
             }
             other => panic!("expected a write, got {other:?}"),
         }
+    }
+
+    fn sample(x: f64, y: f64) -> StrokeSample {
+        StrokeSample {
+            x,
+            y,
+            pressure: 0.5,
+        }
+    }
+
+    fn strokes_at_frame_0(session: &Session) -> Vec<celframe_core::Stroke> {
+        session.project().scenes[0]
+            .visible_strokes(0)
+            .cloned()
+            .collect()
+    }
+
+    fn draw(session: &mut Session, points: &[(f64, f64)]) {
+        session
+            .pen_down(sample(points[0].0, points[0].1), 0.1)
+            .unwrap();
+        let rest: Vec<_> = points[1..].iter().map(|&(x, y)| sample(x, y)).collect();
+        session.pen_move(&rest).unwrap();
+        session.pen_up().unwrap();
+    }
+
+    #[test]
+    fn a_pen_stroke_is_smoothed_and_undoes_in_one_step() {
+        let mut session = Session::new(Project::starter("A"));
+        let points: Vec<_> = (0..20)
+            .map(|i| (f64::from(i) * 5.0, if i % 2 == 0 { 1.0 } else { -1.0 }))
+            .collect();
+        draw(&mut session, &points);
+
+        let strokes = strokes_at_frame_0(&session);
+        assert_eq!(strokes.len(), 1);
+        let stroke = &strokes[0];
+        assert_eq!(stroke.samples.len(), 20);
+        // The ends are kept exactly; the zigzag in between is flattened.
+        assert_eq!(stroke.samples[0], sample(0.0, 1.0));
+        assert_eq!(stroke.samples[19], sample(95.0, -1.0));
+        assert!(stroke.samples[10].y.abs() < 1.0);
+        assert_eq!(stroke.base_width, pen::PEN_WIDTH);
+
+        let view = session.view();
+        assert!(view.dirty && view.can_undo);
+        session.undo().unwrap();
+        assert!(strokes_at_frame_0(&session).is_empty());
+        assert!(!session.view().can_undo);
+    }
+
+    #[test]
+    fn a_tap_is_a_one_sample_stroke() {
+        let mut session = Session::new(Project::starter("A"));
+        draw(&mut session, &[(3.0, 4.0)]);
+        assert_eq!(strokes_at_frame_0(&session)[0].samples, [sample(3.0, 4.0)]);
+    }
+
+    #[test]
+    fn samples_closer_than_the_minimum_distance_are_dropped() {
+        let mut session = Session::new(Project::starter("A"));
+        draw(
+            &mut session,
+            &[(0.0, 0.0), (0.01, 0.0), (0.02, 0.0), (10.0, 0.0)],
+        );
+        assert_eq!(strokes_at_frame_0(&session)[0].samples.len(), 2);
+    }
+
+    #[test]
+    fn strokes_go_to_the_top_visible_unlocked_layer() {
+        let mut project = Project::starter("A");
+        let mut top = celframe_core::Layer::new("Top");
+        top.locked = true;
+        project.scenes[0].layers.push(top);
+        let mut session = Session::new(project);
+        draw(&mut session, &[(0.0, 0.0), (10.0, 0.0)]);
+        let layers = &session.project().scenes[0].layers;
+        assert_eq!(layers[0].drawing_at(0).unwrap().strokes.len(), 1);
+        assert!(layers[1].drawings.is_empty());
+    }
+
+    #[test]
+    fn a_layer_with_no_drawing_gets_one_first() {
+        let mut session = Session::new(Project::new("A"));
+        draw(&mut session, &[(0.0, 0.0), (10.0, 0.0)]);
+        assert_eq!(strokes_at_frame_0(&session).len(), 1);
+    }
+
+    #[test]
+    fn with_no_layer_to_draw_on_the_pen_explains_why() {
+        let mut project = Project::starter("A");
+        project.scenes[0].layers[0].visible = false;
+        let mut session = Session::new(project);
+        let error = session.pen_down(sample(0.0, 0.0), 0.1).unwrap_err();
+        assert!(error.contains("unlock a layer"), "{error}");
+        assert!(!session.view().dirty);
+    }
+
+    #[test]
+    fn invalid_positions_and_stray_moves_are_ignored_safely() {
+        let mut session = Session::new(Project::starter("A"));
+        assert!(session.pen_down(sample(f64::NAN, 0.0), 0.1).is_err());
+        session.pen_move(&[sample(1.0, 1.0)]).unwrap();
+        session.pen_up().unwrap();
+        assert!(strokes_at_frame_0(&session).is_empty());
+    }
+
+    #[test]
+    fn undo_mid_stroke_ends_the_stroke() {
+        let mut session = Session::new(Project::starter("A"));
+        session.pen_down(sample(0.0, 0.0), 0.1).unwrap();
+        session
+            .pen_move(&[sample(5.0, 0.0), sample(10.0, 0.0), sample(15.0, 0.0)])
+            .unwrap();
+        session.undo().unwrap();
+        session.pen_move(&[sample(20.0, 0.0)]).unwrap();
+        session.pen_up().unwrap();
+        assert!(strokes_at_frame_0(&session).is_empty());
+    }
+
+    #[test]
+    fn new_documents_are_ready_to_draw_on() {
+        let mut session = Session::new(Project::new("Old"));
+        session.new_document();
+        draw(&mut session, &[(0.0, 0.0), (10.0, 0.0)]);
+        session.undo().unwrap();
+        // One undo removed the stroke and nothing is left to undo.
+        assert!(!session.view().can_undo);
     }
 
     #[test]

@@ -141,3 +141,13 @@ fn visible_strokes_are_bottom_layer_first_and_skip_hidden_or_empty_layers() {
     assert_eq!(shown, [ids[0], ids[1], ids[3]]);
     assert_eq!(scene.visible_strokes(10).count(), 0);
 }
+
+#[test]
+fn a_starter_project_is_ready_to_draw_on_at_frame_0() {
+    let project = Project::starter("Untitled");
+    assert_eq!(project.scenes.len(), 1);
+    let scene = &project.scenes[0];
+    let drawing = scene.layers[0].drawing_at(0).expect("a drawing at frame 0");
+    assert!(drawing.strokes.is_empty());
+    assert!(scene.layers[0].drawing_at(1).is_none());
+}

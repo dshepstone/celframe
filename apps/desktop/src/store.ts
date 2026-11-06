@@ -46,6 +46,9 @@ export interface AppState {
   load: () => Promise<void>;
   undo: () => Promise<void>;
   redo: () => Promise<void>;
+  /** Ends a pen stroke and shows the document it produced. */
+  finishStroke: () => Promise<void>;
+  reportError: (error: unknown) => void;
   restoreRecovery: () => Promise<void>;
   discardRecovery: () => Promise<void>;
   requestFileAction: (action: FileAction) => Promise<void>;
@@ -102,6 +105,8 @@ export const useApp = create<AppState>((set, get) => {
         set({ error: String(error) });
       }
     },
+    finishStroke: () => sync(backend.penUp()).then(() => undefined),
+    reportError: (error) => set({ error: String(error) }),
     // On failure the prompt stays open, so the person can still discard the copy.
     restoreRecovery: async () => {
       if (await sync(backend.restoreRecovery())) set({ recovery: null });
