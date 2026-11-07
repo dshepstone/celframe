@@ -31,6 +31,9 @@ export function StatusBar() {
           </span>
           <span>{art === "line" ? "Line art" : "Colour art"}</span>
           <span>{strokes} strokes</span>
+          {doc && doc.selection.length > 0 ? (
+            <span>{doc.selection.length} selected</span>
+          ) : null}
         </>
       ) : null}
       <span className="flex-1" />

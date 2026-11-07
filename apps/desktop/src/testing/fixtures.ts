@@ -33,6 +33,7 @@ export function documentView(
     canRedo: false,
     dirty: false,
     path: null,
+    selection: [],
     ...overrides,
   };
 }

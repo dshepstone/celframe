@@ -79,7 +79,8 @@ export interface PenOptions {
   tool:
     | { type: "draw" }
     | { type: "erase"; wholeStrokes: boolean }
-    | { type: "shape"; shape: ShapeOption };
+    | { type: "shape"; shape: ShapeOption }
+    | { type: "select" };
 }
 
 export type ShapeKind = "line" | "rectangle" | "ellipse" | "polygon";
@@ -97,6 +98,8 @@ export interface DocumentView {
   dirty: boolean;
   /** The project's file, or null if it has never been saved. */
   path: string | null;
+  /** IDs of the selected strokes. */
+  selection: string[];
 }
 
 /** A recovery copy left by a run that didn't exit normally. */
@@ -158,6 +161,12 @@ export const backend = {
     await invoke("pen_move", { samples });
   },
   penUp: () => invoke<DocumentView>("pen_up"),
+  selectAll: (part: { layer: string | null; art: Art }) =>
+    invoke<DocumentView>("select_all", { part }),
+  clearSelection: () => invoke<DocumentView>("clear_selection"),
+  deleteSelection: () => invoke<DocumentView>("delete_selection"),
+  nudgeSelection: (dx: number, dy: number) =>
+    invoke<DocumentView>("nudge_selection", { dx, dy }),
   closeWindow: async (): Promise<void> => {
     await invoke("close_window");
   },

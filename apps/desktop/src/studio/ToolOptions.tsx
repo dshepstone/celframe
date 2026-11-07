@@ -158,7 +158,14 @@ export function ToolOptions() {
       aria-label="Tool options"
       className="flex h-10 items-center gap-4 border-b border-border bg-surface-raised px-3 text-sm"
     >
-      {erasing ? (
+      {tool === "select" ? (
+        <>
+          <span className="font-medium">Select</span>
+          <span className="text-text-muted">
+            Drag to move. Shift-click to add. Arrow keys nudge.
+          </span>
+        </>
+      ) : erasing ? (
         <>
           <span className="font-medium">Eraser</span>
           <SizeControl

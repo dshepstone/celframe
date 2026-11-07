@@ -22,6 +22,10 @@ vi.mock("./backend", () => ({
     redo: vi.fn(),
     executeCommand: vi.fn(),
     addLayer: vi.fn(),
+    selectAll: vi.fn(),
+    clearSelection: vi.fn(),
+    deleteSelection: vi.fn(),
+    nudgeSelection: vi.fn(),
     onCloseRequested: vi.fn(() => Promise.resolve(() => undefined)),
   },
 }));
@@ -137,6 +141,31 @@ describe("App shell", () => {
     });
     await userEvent.click(screen.getByRole("radio", { name: "Line" }));
     expect(screen.queryByRole("spinbutton", { name: "Sides" })).toBeNull();
+  });
+
+  it("selects, nudges and deletes through the core", async () => {
+    const selected = view({ selection: ["k1"] });
+    vi.mocked(backend.selectAll).mockResolvedValue(selected);
+    vi.mocked(backend.nudgeSelection).mockResolvedValue(selected);
+    vi.mocked(backend.deleteSelection).mockResolvedValue(view());
+    render(<App />);
+    await screen.findByText("Bouncing ball");
+    await userEvent.keyboard("v");
+    expect(useApp.getState().penOptions().tool).toEqual({ type: "select" });
+
+    await userEvent.keyboard("{Control>}a{/Control}");
+    expect(backend.selectAll).toHaveBeenCalledWith({
+      layer: null,
+      art: "line",
+    });
+    await screen.findByText("1 selected");
+    await userEvent.keyboard("{Shift>}{ArrowUp}{/Shift}");
+    expect(backend.nudgeSelection).toHaveBeenCalledWith(0, 10);
+    await userEvent.keyboard("{ArrowLeft}");
+    expect(backend.nudgeSelection).toHaveBeenCalledWith(-1, 0);
+    await userEvent.keyboard("{Delete}");
+    expect(backend.deleteSelection).toHaveBeenCalledOnce();
+    await waitFor(() => expect(screen.queryByText("1 selected")).toBeNull());
   });
 
   it("erases with the eraser's own size and mode", async () => {

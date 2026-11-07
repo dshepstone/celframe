@@ -47,7 +47,7 @@ export type UnsavedChoice = "save" | "discard" | "cancel";
 export type Rgba = [number, number, number, number];
 
 /** The tools that work so far. */
-export type Tool = "pen" | "eraser" | "shape" | "hand" | "zoom";
+export type Tool = "pen" | "eraser" | "shape" | "select" | "hand" | "zoom";
 
 /** The layer new strokes go to: the chosen one, or else the topmost visible, unlocked one. */
 export function targetLayer(
@@ -117,6 +117,10 @@ export interface AppState {
   setShapeKind: (kind: ShapeKind) => void;
   setPolygonSides: (sides: number) => void;
   toggleArt: () => void;
+  selectAll: () => Promise<void>;
+  clearSelection: () => Promise<void>;
+  deleteSelection: () => Promise<void>;
+  nudgeSelection: (dx: number, dy: number) => Promise<void>;
   setSpaceHeld: (held: boolean) => void;
   changeView: (change: ViewChange) => Promise<void>;
 }
@@ -231,7 +235,11 @@ export const useApp = create<AppState>((set, get) => {
         brushWidth: Math.min(BRUSH_WIDTH_MAX, Math.max(BRUSH_WIDTH_MIN, width)),
       }),
     setBrushColor: (brushColor) => set({ brushColor }),
-    setActiveLayer: (activeLayer) => set({ activeLayer }),
+    setActiveLayer: (activeLayer) => {
+      // A selection belongs to one layer and part.
+      if (activeLayer !== get().activeLayer) void get().clearSelection();
+      set({ activeLayer });
+    },
     runCommand: async (command) => {
       await sync(backend.executeCommand(command));
       // A removed layer can't stay chosen.
@@ -274,7 +282,9 @@ export const useApp = create<AppState>((set, get) => {
                     ? { type: "polygon", sides: state.polygonSides }
                     : { type: state.shapeKind },
               }
-            : { type: "draw" },
+            : state.tool === "select"
+              ? { type: "select" }
+              : { type: "draw" },
       };
     },
     setShapeKind: (shapeKind) => set({ shapeKind }),
@@ -293,8 +303,26 @@ export const useApp = create<AppState>((set, get) => {
         ),
       }),
     setEraseWholeStrokes: (eraseWholeStrokes) => set({ eraseWholeStrokes }),
-    setArt: (art) => set({ art }),
-    toggleArt: () =>
-      set(({ art }) => ({ art: art === "line" ? "colour" : "line" })),
+    setArt: (art) => {
+      if (art !== get().art) void get().clearSelection();
+      set({ art });
+    },
+    toggleArt: () => get().setArt(get().art === "line" ? "colour" : "line"),
+    selectAll: async () => {
+      const { activeLayer, art } = get();
+      await sync(backend.selectAll({ layer: activeLayer, art }));
+    },
+    clearSelection: async () => {
+      if ((get().document?.selection.length ?? 0) === 0) return;
+      await sync(backend.clearSelection());
+    },
+    deleteSelection: async () => {
+      if ((get().document?.selection.length ?? 0) === 0) return;
+      await sync(backend.deleteSelection());
+    },
+    nudgeSelection: async (dx, dy) => {
+      if ((get().document?.selection.length ?? 0) === 0) return;
+      await sync(backend.nudgeSelection(dx, dy));
+    },
   };
 });
