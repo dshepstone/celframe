@@ -1,6 +1,7 @@
 //! Tauri shell. The Rust core owns the document, and the UI talks to it through these commands.
 
 mod canvas;
+mod eraser;
 mod pen;
 mod recovery;
 mod session;

@@ -75,6 +75,8 @@ export interface PenOptions {
   /** null draws on the topmost visible, unlocked layer. */
   layer: string | null;
   art: Art;
+  /** Draw, or erase with `width` as the eraser's diameter. */
+  tool: { type: "draw" } | { type: "erase"; wholeStrokes: boolean };
 }
 
 export interface DocumentView {

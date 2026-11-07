@@ -4,7 +4,8 @@ use std::path::{Path, PathBuf};
 
 use celframe_core::{Command, CommandError, Drawing, Exposure, History, Project, StrokeSample};
 
-use crate::pen::{self, PenOptions, PenStroke};
+use crate::eraser::EraserDrag;
+use crate::pen::{self, PenOptions, PenStroke, PenTool};
 use serde::Serialize;
 
 pub struct Session {
@@ -16,6 +17,8 @@ pub struct Session {
     recovery_pending: bool,
     /// The stroke being drawn, if the pen is down.
     pen: Option<PenStroke>,
+    /// The eraser drag in progress, if the pen is down and erasing.
+    eraser: Option<EraserDrag>,
 }
 
 /// What the recovery copy on disk holds, as far as this session knows.
@@ -60,6 +63,7 @@ impl Session {
             autosave: AutosaveState::None,
             recovery_pending: false,
             pen: None,
+            eraser: None,
         }
     }
 
@@ -68,7 +72,7 @@ impl Session {
         self.project = project;
         self.history = History::new();
         self.path = path;
-        self.pen = None;
+        self.end_drags();
         if self.autosave != AutosaveState::None {
             self.autosave = AutosaveState::Stale;
         }
@@ -113,20 +117,20 @@ impl Session {
     }
 
     pub fn execute(&mut self, command: Command) -> Result<DocumentView, CommandError> {
-        // Any other edit ends a stroke in progress, as it does in the history.
-        self.pen = None;
+        // Any other edit ends a drag in progress, as it does in the history.
+        self.end_drags();
         self.history.execute(&mut self.project, command)?;
         Ok(self.view())
     }
 
     pub fn undo(&mut self) -> Result<DocumentView, CommandError> {
-        self.pen = None;
+        self.end_drags();
         self.history.undo(&mut self.project)?;
         Ok(self.view())
     }
 
     pub fn redo(&mut self) -> Result<DocumentView, CommandError> {
-        self.pen = None;
+        self.end_drags();
         self.history.redo(&mut self.project)?;
         Ok(self.view())
     }
@@ -225,7 +229,7 @@ impl Session {
         min_distance: f64,
         options: PenOptions,
     ) -> Result<(), String> {
-        if self.pen.is_some() {
+        if self.pen.is_some() || self.eraser.is_some() {
             self.pen_up()?;
         }
         if !pen::PEN_WIDTH_RANGE.contains(&options.width) {
@@ -233,6 +237,19 @@ impl Session {
         }
         let first = pen::clean(sample).ok_or("That pen position isn't valid.")?;
         let (scene, layer, drawing) = pen::find_target(&self.project, 0, options.layer)?;
+        if let PenTool::Erase { whole_strokes } = options.tool {
+            self.history.begin_group();
+            self.eraser = Some(EraserDrag {
+                scene,
+                layer,
+                drawing,
+                art: options.art,
+                radius: options.width / 2.0,
+                whole_strokes,
+                last: [first.x, first.y],
+            });
+            return self.erase(&[first]);
+        }
         let drawing = match drawing {
             Some(drawing) => drawing,
             None => self.add_drawing_at_frame_0(scene, layer)?,
@@ -262,6 +279,10 @@ impl Session {
 
     /// Adds scene-space samples to the stroke in progress. Ignored when the pen isn't down.
     pub fn pen_move(&mut self, samples: &[StrokeSample]) -> Result<(), String> {
+        if self.eraser.is_some() {
+            let samples: Vec<_> = samples.iter().copied().filter_map(pen::clean).collect();
+            return self.erase(&samples);
+        }
         let Some(pen) = self.pen.as_mut() else {
             return Ok(());
         };
@@ -269,8 +290,11 @@ impl Session {
         self.append(samples)
     }
 
-    /// Ends the stroke in progress, if any.
+    /// Ends the stroke or eraser drag in progress, if any.
     pub fn pen_up(&mut self) -> Result<DocumentView, String> {
+        if self.eraser.take().is_some() {
+            self.history.end_group();
+        }
         if let Some(pen) = self.pen.take() {
             let target = (pen.scene, pen.layer, pen.drawing, pen.stroke);
             let samples = pen.finish();
@@ -278,6 +302,31 @@ impl Session {
             self.history.end_stroke();
         }
         Ok(self.view())
+    }
+
+    fn end_drags(&mut self) {
+        self.pen = None;
+        if self.eraser.take().is_some() {
+            self.history.end_group();
+        }
+    }
+
+    /// Erases along the eraser's path to `samples`, merging into the drag's undo step.
+    fn erase(&mut self, samples: &[StrokeSample]) -> Result<(), String> {
+        let Some(eraser) = self.eraser.as_mut() else {
+            return Ok(());
+        };
+        let commands = eraser.erase_to(&self.project, samples);
+        if commands.is_empty() {
+            return Ok(());
+        }
+        let result = self
+            .history
+            .execute(&mut self.project, Command::Batch { commands });
+        if result.is_err() {
+            self.end_drags();
+        }
+        result.map_err(|e| e.to_string())
     }
 
     fn append(&mut self, samples: Vec<StrokeSample>) -> Result<(), String> {
@@ -651,6 +700,83 @@ mod tests {
         assert!(layers[1].drawings.is_empty());
     }
 
+    fn eraser(width: f64, whole_strokes: bool) -> PenOptions {
+        PenOptions {
+            width,
+            tool: PenTool::Erase { whole_strokes },
+            ..PenOptions::default()
+        }
+    }
+
+    /// A session with one horizontal line art stroke from x = -100 to 100 at frame 0.
+    fn session_with_a_line() -> Session {
+        let mut session = Session::new(Project::starter("A"));
+        session
+            .pen_down(sample(-100.0, 0.0), 0.1, PenOptions::default())
+            .unwrap();
+        session.pen_move(&[sample(100.0, 0.0)]).unwrap();
+        session.pen_up().unwrap();
+        session
+    }
+
+    #[test]
+    fn a_drag_of_the_eraser_cuts_strokes_and_undoes_as_one_step() {
+        let mut session = session_with_a_line();
+        let drawn = session.project().clone();
+
+        session
+            .pen_down(sample(-50.0, 20.0), 0.1, eraser(10.0, false))
+            .unwrap();
+        session.pen_move(&[sample(-50.0, -20.0)]).unwrap();
+        session.pen_move(&[sample(50.0, -20.0)]).unwrap();
+        session.pen_move(&[sample(50.0, 20.0)]).unwrap();
+        session.pen_up().unwrap();
+
+        let pieces = strokes_at_frame_0(&session);
+        assert_eq!(pieces.len(), 3, "two cuts leave three pieces");
+        assert!(pieces.iter().all(|s| s.base_width == pen::PEN_WIDTH));
+
+        session.undo().unwrap();
+        assert_eq!(session.project(), &drawn, "one undo restores the stroke");
+    }
+
+    #[test]
+    fn whole_strokes_mode_removes_a_touched_stroke() {
+        let mut session = session_with_a_line();
+        session
+            .pen_down(sample(0.0, 0.0), 0.1, eraser(4.0, true))
+            .unwrap();
+        session.pen_up().unwrap();
+        assert!(strokes_at_frame_0(&session).is_empty());
+    }
+
+    #[test]
+    fn the_eraser_only_erases_the_current_part() {
+        let mut session = session_with_a_line();
+        let colour = PenOptions {
+            art: celframe_core::Art::Colour,
+            ..eraser(40.0, true)
+        };
+        session.pen_down(sample(0.0, 0.0), 0.1, colour).unwrap();
+        session.pen_up().unwrap();
+        assert_eq!(strokes_at_frame_0(&session).len(), 1);
+    }
+
+    #[test]
+    fn an_eraser_that_touches_nothing_adds_no_undo_step() {
+        let mut session = session_with_a_line();
+        session
+            .pen_down(sample(0.0, 500.0), 0.1, eraser(10.0, false))
+            .unwrap();
+        session.pen_move(&[sample(10.0, 500.0)]).unwrap();
+        session.pen_up().unwrap();
+        session.undo().unwrap();
+        assert!(
+            strokes_at_frame_0(&session).is_empty(),
+            "undo removed the line"
+        );
+    }
+
     #[test]
     fn the_chosen_brush_size_colour_and_layer_are_used() {
         let mut project = Project::starter("A");
@@ -664,6 +790,7 @@ mod tests {
             color: [200, 10, 20, 255],
             layer: Some(bottom),
             art: celframe_core::Art::Colour,
+            tool: PenTool::Draw,
         };
         session.pen_down(sample(0.0, 0.0), 0.1, options).unwrap();
         session.pen_up().unwrap();

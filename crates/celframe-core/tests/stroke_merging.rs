@@ -184,3 +184,55 @@ fn append_and_truncate_reverse_each_other() {
     redo.apply(&mut d.project).unwrap();
     assert_eq!(d.project, after);
 }
+
+#[test]
+fn a_group_of_edits_undoes_and_redoes_as_one_step() {
+    let mut doc = doc();
+    let mut history = History::new();
+    let (a, b) = (new_stroke(), new_stroke());
+    let command = doc.add(&a);
+    history.execute(&mut doc.project, command).unwrap();
+    let before = doc.project.clone();
+
+    history.begin_group();
+    let remove = Command::RemoveStroke {
+        scene: doc.scene,
+        layer: doc.layer,
+        drawing: doc.drawing,
+        stroke: a.id,
+    };
+    history.execute(&mut doc.project, remove).unwrap();
+    let command = doc.add(&b);
+    history.execute(&mut doc.project, command).unwrap();
+    let command = doc.append(b.id, &[1.0]);
+    history.execute(&mut doc.project, command).unwrap();
+    history.end_group();
+    let after = doc.project.clone();
+    assert_eq!(doc.strokes().len(), 1);
+
+    assert!(history.undo(&mut doc.project).unwrap());
+    assert_eq!(doc.project, before, "one undo reverses the whole group");
+    assert!(history.redo(&mut doc.project).unwrap());
+    assert_eq!(doc.project, after);
+    assert!(history.undo(&mut doc.project).unwrap());
+    assert!(
+        history.undo(&mut doc.project).unwrap(),
+        "the earlier edit is its own step"
+    );
+    assert!(doc.strokes().is_empty());
+}
+
+#[test]
+fn an_empty_group_adds_no_undo_step() {
+    let mut doc = doc();
+    let mut history = History::new();
+    history.begin_group();
+    history.end_group();
+    assert!(!history.can_undo());
+    let command = doc.add(&new_stroke());
+    history.execute(&mut doc.project, command).unwrap();
+    history.begin_group();
+    history.end_group();
+    assert!(history.undo(&mut doc.project).unwrap());
+    assert!(!history.can_undo());
+}

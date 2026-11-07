@@ -46,7 +46,7 @@ export type UnsavedChoice = "save" | "discard" | "cancel";
 export type Rgba = [number, number, number, number];
 
 /** The tools that work so far. */
-export type Tool = "pen" | "hand" | "zoom";
+export type Tool = "pen" | "eraser" | "hand" | "zoom";
 
 /** The layer new strokes go to: the chosen one, or else the topmost visible, unlocked one. */
 export function targetLayer(
@@ -75,6 +75,10 @@ export interface AppState {
   activeLayer: string | null;
   /** The part of the drawing the pen draws on. */
   art: Art;
+  /** The eraser's diameter in scene units. */
+  eraserWidth: number;
+  /** The eraser removes every stroke it touches instead of cutting it. */
+  eraseWholeStrokes: boolean;
   tool: Tool;
   /** Space is held, which pans with any tool. */
   spaceHeld: boolean;
@@ -105,6 +109,8 @@ export interface AppState {
   penOptions: () => PenOptions;
   setTool: (tool: Tool) => void;
   setArt: (art: Art) => void;
+  setEraserWidth: (width: number) => void;
+  setEraseWholeStrokes: (whole: boolean) => void;
   toggleArt: () => void;
   setSpaceHeld: (held: boolean) => void;
   changeView: (change: ViewChange) => Promise<void>;
@@ -154,6 +160,8 @@ export const useApp = create<AppState>((set, get) => {
     brushColor: [0, 0, 0, 255],
     activeLayer: null,
     art: "line",
+    eraserWidth: 20,
+    eraseWholeStrokes: false,
     tool: "pen",
     spaceHeld: false,
     view: null,
@@ -240,9 +248,26 @@ export const useApp = create<AppState>((set, get) => {
       }
     },
     penOptions: () => {
-      const { brushWidth, brushColor, activeLayer, art } = get();
-      return { width: brushWidth, color: brushColor, layer: activeLayer, art };
+      const state = get();
+      const erasing = state.tool === "eraser";
+      return {
+        width: erasing ? state.eraserWidth : state.brushWidth,
+        color: state.brushColor,
+        layer: state.activeLayer,
+        art: state.art,
+        tool: erasing
+          ? { type: "erase", wholeStrokes: state.eraseWholeStrokes }
+          : { type: "draw" },
+      };
     },
+    setEraserWidth: (width) =>
+      set({
+        eraserWidth: Math.min(
+          BRUSH_WIDTH_MAX,
+          Math.max(BRUSH_WIDTH_MIN, width),
+        ),
+      }),
+    setEraseWholeStrokes: (eraseWholeStrokes) => set({ eraseWholeStrokes }),
     setArt: (art) => set({ art }),
     toggleArt: () =>
       set(({ art }) => ({ art: art === "line" ? "colour" : "line" })),

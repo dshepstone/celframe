@@ -55,7 +55,10 @@ export function App() {
   } = useApp();
 
   const [canvasRef, nativeCanvas] = useNativeCanvas<HTMLElement>(theme);
-  usePenInput(canvasRef, nativeCanvas && tool === "pen" && !spaceHeld);
+  usePenInput(
+    canvasRef,
+    nativeCanvas && (tool === "pen" || tool === "eraser") && !spaceHeld,
+  );
   useCanvasNavigation(canvasRef, nativeCanvas);
 
   // Single-key shortcuts for tools and the view. Ignored while typing.
@@ -70,6 +73,7 @@ export function App() {
       }
       const action: Record<string, () => void> = {
         p: () => setTool("pen"),
+        e: () => setTool("eraser"),
         h: () => setTool("hand"),
         z: () => setTool("zoom"),
         l: () => toggleArt(),
@@ -277,7 +281,9 @@ export function App() {
                     ? "cursor-grab"
                     : tool === "zoom"
                       ? "cursor-zoom-in"
-                      : "cursor-crosshair"
+                      : tool === "eraser"
+                        ? "cursor-cell"
+                        : "cursor-crosshair"
                 }`
               : "bg-canvas-backdrop"
           }`}
