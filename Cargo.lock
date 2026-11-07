@@ -379,8 +379,11 @@ name = "celframe-render"
 version = "0.0.0"
 dependencies = [
  "celframe-core",
+ "celframe-format",
  "celframe-geom",
+ "png",
  "pollster",
+ "tempfile",
  "wgpu",
 ]
 
