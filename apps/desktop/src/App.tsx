@@ -1,5 +1,5 @@
 import { Menu, SegmentedControl } from "@celframe/ui";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { backend } from "./backend";
 import { CommandPalette } from "./CommandPalette";
 import { RecoveryDialog } from "./RecoveryDialog";
@@ -7,6 +7,8 @@ import { useApp } from "./store";
 import { ColourPanel } from "./studio/ColourPanel";
 import { RedoIcon, SearchIcon, UndoIcon } from "./studio/icons";
 import { SidePanelResizer } from "./studio/SidePanelResizer";
+import { AboutDialog } from "./studio/AboutDialog";
+import { LogoTile } from "./studio/brand";
 import { LayersPanel } from "./studio/LayersPanel";
 import { ShelfBar } from "./studio/ShelfBar";
 import { ToolProperties } from "./studio/ToolProperties";
@@ -35,6 +37,7 @@ const headerIcon =
   "flex h-6 w-6 items-center justify-center rounded text-text-muted outline-none hover:bg-surface-hover hover:text-text focus-visible:outline-2 focus-visible:outline-focus-ring disabled:opacity-35 disabled:hover:bg-transparent";
 
 export function App() {
+  const [aboutOpen, setAboutOpen] = useState(false);
   const {
     document: doc,
     error,
@@ -209,11 +212,8 @@ export function App() {
     // No background here: the canvas area must stay see-through for the native canvas.
     <div className="flex h-screen flex-col bg-surface text-text">
       <header className="flex h-8 shrink-0 items-center gap-0.5 border-b border-border bg-surface-raised px-1.5">
-        <span
-          aria-hidden="true"
-          className="mr-1.5 ml-0.5 flex h-[18px] w-[18px] items-center justify-center rounded-[4px] bg-accent text-[10px] font-bold text-text-on-accent"
-        >
-          C
+        <span className="mr-1.5 ml-0.5 flex">
+          <LogoTile size={18} />
         </span>
         <nav aria-label="Menu" className="flex items-center">
           <Menu
@@ -333,6 +333,15 @@ export function App() {
               },
             ]}
           />
+          <Menu
+            label="Help"
+            items={[
+              {
+                label: "About Celframe",
+                onSelect: () => setAboutOpen(true),
+              },
+            ]}
+          />
         </nav>
         <div className="mx-2 h-4 w-px bg-border" aria-hidden="true" />
         <h1 className="truncate text-sm text-text-muted">
@@ -438,6 +447,7 @@ export function App() {
       ) : null}
       <StatusBar />
       <CommandPalette />
+      <AboutDialog open={aboutOpen} onOpenChange={setAboutOpen} />
       <UnsavedChangesDialog />
       <RecoveryDialog />
     </div>
