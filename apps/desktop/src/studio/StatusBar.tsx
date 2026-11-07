@@ -5,7 +5,7 @@ const viewButton =
 
 /** One line of facts about the open document, and the view controls. */
 export function StatusBar() {
-  const { document: doc, activeLayer, view, changeView } = useApp();
+  const { document: doc, activeLayer, art, view, changeView } = useApp();
   const scene = doc?.project.scenes[0];
   const layer = scene ? targetLayer(scene.layers, activeLayer) : null;
   const strokes = scene?.layers.reduce(
@@ -29,6 +29,7 @@ export function StatusBar() {
           <span>
             Drawing on: {layer ? layer.name : "no visible, unlocked layer"}
           </span>
+          <span>{art === "line" ? "Line art" : "Colour art"}</span>
           <span>{strokes} strokes</span>
         </>
       ) : null}

@@ -1,6 +1,6 @@
 # The .celf file format
 
-This is the open specification of Celframe's project format. It describes schema version 1.
+This is the open specification of Celframe's project format. It describes schema version 2.
 
 ## Container
 
@@ -21,7 +21,7 @@ A `.celf` file is a standard zip archive. Anyone can open it with ordinary zip t
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "0190f0a0-0000-7000-8000-000000000001",
   "name": "Bouncing ball",
   "scenes": ["0190f0a0-0000-7000-8000-000000000002"]
@@ -58,6 +58,7 @@ A `.celf` file is a standard zip archive. Anyone can open it with ordinary zip t
               "id": "0190f0a0-0000-7000-8000-000000000005",
               "baseWidth": 4.0,
               "color": [0, 0, 0, 255],
+              "art": "line",
               "samples": [{ "x": 0.0, "y": 0.0, "pressure": 0.5 }]
             }
           ]
@@ -75,7 +76,7 @@ A `.celf` file is a standard zip archive. Anyone can open it with ordinary zip t
 }
 ```
 
-Units and axes are defined in [the coordinate spec](specs/units-and-coordinates.md). Lists run from the bottom of the stack to the top: the first layer is the lowest layer, and the first stroke is drawn first.
+Units and axes are defined in [the coordinate spec](specs/units-and-coordinates.md). Lists run from the bottom of the stack to the top: the first layer is the lowest layer, and the first stroke is drawn first. Within a drawing, strokes with `"art": "colour"` draw below strokes with `"art": "line"`; see [line art and colour art](specs/line-and-colour-art.md).
 
 ## Validity rules
 
@@ -87,6 +88,7 @@ A reader must reject a file that breaks any of these rules. Celframe also refuse
 - Stroke positions are finite numbers, and `baseWidth` is finite and not negative.
 - `pressure` is from 0.0 to 1.0.
 - `color` is straight RGBA, with 8 bits per channel.
+- `art` is `"line"` or `"colour"`.
 - Exposures are sorted by `startFrame`, don't overlap, last at least 1 frame, and use a drawing on the same layer.
 
 Undo history and view state, such as zoom, aren't stored.
@@ -98,6 +100,7 @@ Undo history and view state, such as zoom, aren't stored.
 - Version 0 or a missing version is invalid.
 - Any change to saved data raises the version and adds a migration and a round-trip test.
 
-| Version | Changes       |
-| ------- | ------------- |
-| 1       | First version |
+| Version | Changes                                                            |
+| ------- | ------------------------------------------------------------------ |
+| 1       | First version                                                      |
+| 2       | Adds `art` to every stroke. Upgrading makes every stroke line art. |

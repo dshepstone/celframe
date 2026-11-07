@@ -10,6 +10,7 @@ fn stroke(base_width: f64, samples: &[(f64, f64, f32)]) -> Stroke {
         id: StrokeId::new(),
         base_width,
         color: [0, 0, 0, 255],
+        art: celframe_core::Art::Line,
         samples: samples
             .iter()
             .map(|&(x, y, pressure)| StrokeSample { x, y, pressure })

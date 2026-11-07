@@ -4,7 +4,7 @@ use celframe_core::{Project, SCHEMA_VERSION};
 use serde_json::{Value, json};
 use zip::write::SimpleFileOptions;
 
-use crate::migrate::{Migration, RawDocument};
+use crate::migrate::{MIGRATIONS, Migration, RawDocument};
 use crate::{FormatError, read_project, read_with};
 
 const CURRENT: u32 = SCHEMA_VERSION;
@@ -49,6 +49,11 @@ fn rename_old_fields(document: &mut RawDocument) -> Result<(), String> {
     Ok(())
 }
 
+/// The real migrations followed by `extra`, so `extra[0]` upgrades from `CURRENT`.
+fn steps(extra: &[Migration]) -> Vec<Migration> {
+    MIGRATIONS.iter().chain(extra).copied().collect()
+}
+
 fn with_version(version: Value) -> Vec<u8> {
     let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
     zip.start_file("project.json", SimpleFileOptions::default())
@@ -62,7 +67,7 @@ fn with_version(version: Value) -> Vec<u8> {
 fn an_older_file_is_migrated_then_loaded() {
     let (project, bytes) = old_file();
     let migrations: &[Migration] = &[rename_old_fields];
-    let loaded = read_with(Cursor::new(bytes), CURRENT + 1, migrations).unwrap();
+    let loaded = read_with(Cursor::new(bytes), CURRENT + 1, &steps(migrations)).unwrap();
     assert_eq!(loaded, project);
 }
 
@@ -73,14 +78,14 @@ fn migrations_run_in_order_across_several_versions() {
     }
     let (project, bytes) = old_file();
     let migrations: &[Migration] = &[rename_old_fields, does_nothing];
-    let loaded = read_with(Cursor::new(bytes), CURRENT + 2, migrations).unwrap();
+    let loaded = read_with(Cursor::new(bytes), CURRENT + 2, &steps(migrations)).unwrap();
     assert_eq!(loaded, project);
 }
 
 #[test]
 fn a_missing_migration_step_is_an_error() {
     let (_, bytes) = old_file();
-    let result = read_with(Cursor::new(bytes), CURRENT + 1, &[]);
+    let result = read_with(Cursor::new(bytes), CURRENT + 1, MIGRATIONS);
     assert!(matches!(result, Err(FormatError::InvalidDocument(_))));
 }
 
@@ -91,7 +96,7 @@ fn a_failing_migration_is_an_error() {
     }
     let (_, bytes) = old_file();
     let migrations: &[Migration] = &[fails];
-    let result = read_with(Cursor::new(bytes), CURRENT + 1, migrations);
+    let result = read_with(Cursor::new(bytes), CURRENT + 1, &steps(migrations));
     assert!(matches!(result, Err(FormatError::InvalidDocument(reason)) if reason.contains("nope")));
 }
 
@@ -107,4 +112,46 @@ fn version_zero_or_a_missing_version_is_invalid() {
         let result = read_project(Cursor::new(with_version(version)));
         assert!(matches!(result, Err(FormatError::InvalidDocument(_))));
     }
+}
+
+/// A version 1 file as Celframe 1 wrote it: strokes have no `art`.
+fn version_1_file() -> (Project, Vec<u8>) {
+    let mut project = Project::starter("Old ink");
+    let drawing = &mut project.scenes[0].layers[0].drawings[0];
+    drawing.strokes.push(celframe_core::Stroke {
+        id: celframe_core::StrokeId::new(),
+        base_width: 3.0,
+        color: [1, 2, 3, 255],
+        art: celframe_core::Art::Line,
+        samples: vec![celframe_core::StrokeSample {
+            x: 1.5,
+            y: -2.5,
+            pressure: 0.5,
+        }],
+    });
+    let scene = &project.scenes[0];
+    let manifest = json!({
+        "schemaVersion": 1,
+        "id": project.id,
+        "name": project.name,
+        "scenes": [scene.id],
+    });
+    let mut scene_json = serde_json::to_value(scene).unwrap();
+    let stroke = &mut scene_json["layers"][0]["drawings"][0]["strokes"][0];
+    stroke.as_object_mut().unwrap().remove("art").unwrap();
+
+    let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
+    let options = SimpleFileOptions::default();
+    zip.start_file("project.json", options).unwrap();
+    zip.write_all(manifest.to_string().as_bytes()).unwrap();
+    zip.start_file(format!("scenes/{}.json", scene.id.as_uuid()), options)
+        .unwrap();
+    zip.write_all(scene_json.to_string().as_bytes()).unwrap();
+    (project, zip.finish().unwrap().into_inner())
+}
+
+#[test]
+fn a_version_1_file_opens_with_every_stroke_as_line_art() {
+    let (project, bytes) = version_1_file();
+    assert_eq!(read_project(Cursor::new(bytes)).unwrap(), project);
 }

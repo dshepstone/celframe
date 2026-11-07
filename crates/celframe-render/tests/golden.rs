@@ -70,6 +70,7 @@ fn draw(
         id,
         base_width,
         color,
+        art: celframe_core::Art::Line,
         samples: smoothed[..1].to_vec(),
     };
     history

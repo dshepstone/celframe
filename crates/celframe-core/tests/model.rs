@@ -108,6 +108,7 @@ fn stroke() -> Stroke {
         id: StrokeId::new(),
         base_width: 1.0,
         color: [0, 0, 0, 255],
+        art: celframe_core::Art::Line,
         samples: Vec::new(),
     }
 }
@@ -140,6 +141,33 @@ fn visible_strokes_are_bottom_layer_first_and_skip_hidden_or_empty_layers() {
     let shown: Vec<StrokeId> = scene.visible_strokes(3).map(|s| s.id).collect();
     assert_eq!(shown, [ids[0], ids[1], ids[3]]);
     assert_eq!(scene.visible_strokes(10).count(), 0);
+}
+
+#[test]
+fn colour_art_draws_below_line_art_within_each_drawing() {
+    let colour = |s: Stroke| Stroke {
+        art: celframe_core::Art::Colour,
+        ..s
+    };
+    let (line_a, fill_a, line_b, fill_b) = (stroke(), colour(stroke()), stroke(), colour(stroke()));
+    let order = [fill_a.id, line_a.id, fill_b.id, line_b.id];
+    let mut scene = Scene::new("Shot");
+    scene.layers = vec![
+        layer_showing(vec![line_a, fill_a]),
+        layer_showing(vec![line_b, fill_b]),
+    ];
+
+    let shown: Vec<StrokeId> = scene.visible_strokes(0).map(|s| s.id).collect();
+    assert_eq!(
+        shown, order,
+        "a higher layer's colour art still covers lower line art"
+    );
+}
+
+#[test]
+fn art_is_saved_as_line_or_colour() {
+    let json = serde_json::to_value([celframe_core::Art::Line, celframe_core::Art::Colour]);
+    assert_eq!(json.unwrap(), serde_json::json!(["line", "colour"]));
 }
 
 #[test]

@@ -162,6 +162,16 @@ describe("App shell", () => {
     });
   });
 
+  it("switches between line art and colour art with the bar or L", async () => {
+    render(<App />);
+    await screen.findByText("Line art", { selector: "footer span" });
+    await userEvent.click(screen.getByRole("radio", { name: "Colour art" }));
+    expect(useApp.getState().penOptions().art).toBe("colour");
+    await screen.findByText("Colour art", { selector: "footer span" });
+    await userEvent.keyboard("l");
+    expect(useApp.getState().art).toBe("line");
+  });
+
   it("picks a pen colour from the swatches", async () => {
     render(<App />);
     await userEvent.click(

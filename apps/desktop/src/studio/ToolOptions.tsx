@@ -9,6 +9,8 @@ export function ToolOptions() {
     brushWidth,
     brushColor,
     setBrushWidth,
+    art,
+    setArt,
     undo,
     redo,
   } = useApp();
@@ -54,6 +56,29 @@ export function ToolOptions() {
           aria-label={`Current colour ${rgbaToHex(brushColor)}`}
           role="img"
         />
+      </span>
+      <span
+        role="radiogroup"
+        aria-label="Draw on"
+        className="flex items-center rounded border border-control-border"
+        title="Switch with L"
+      >
+        {(["line", "colour"] as const).map((part) => (
+          <button
+            key={part}
+            type="button"
+            role="radio"
+            aria-checked={art === part}
+            onClick={() => setArt(part)}
+            className={`px-2 py-0.5 outline-none focus-visible:outline-2 focus-visible:outline-focus-ring ${
+              art === part
+                ? "bg-accent text-text-on-accent"
+                : "text-text hover:bg-surface-sunken"
+            }`}
+          >
+            {part === "line" ? "Line art" : "Colour art"}
+          </button>
+        ))}
       </span>
       <div className="flex-1" />
       <Button disabled={!doc?.canUndo} onClick={() => void undo()}>

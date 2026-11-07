@@ -13,7 +13,7 @@ export interface Layer {
   name: string;
   visible: boolean;
   locked: boolean;
-  drawings: { id: string; strokes: unknown[] }[];
+  drawings: { id: string; strokes: Stroke[] }[];
   /** Sorted by start frame, with no overlaps. */
   exposures: Exposure[];
 }
@@ -58,11 +58,23 @@ export interface ViewInfo {
 }
 
 /** What the next stroke looks like and where it goes. */
+/** Which part of a drawing a stroke is on. Colour art draws below line art. */
+export type Art = "line" | "colour";
+
+export interface Stroke {
+  id: string;
+  baseWidth: number;
+  color: [number, number, number, number];
+  art: Art;
+  samples: { x: number; y: number; pressure: number }[];
+}
+
 export interface PenOptions {
   width: number;
   color: [number, number, number, number];
   /** null draws on the topmost visible, unlocked layer. */
   layer: string | null;
+  art: Art;
 }
 
 export interface DocumentView {

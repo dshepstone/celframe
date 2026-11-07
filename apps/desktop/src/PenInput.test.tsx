@@ -72,7 +72,7 @@ describe("pen input", () => {
     pointer("pointerDown", { clientX: 10, clientY: 20 });
     expect(backend.penDown).toHaveBeenCalledWith(
       { x: 10, y: 20, pressure: 1 },
-      { width: 10, color: [0, 0, 0, 255], layer: null },
+      { width: 10, color: [0, 0, 0, 255], layer: null, art: "line" },
     );
 
     pointer("pointerMove", { clientX: 11, clientY: 21 });
@@ -128,6 +128,7 @@ describe("pen input", () => {
       width: 4,
       color: [200, 10, 20, 255],
       layer: "l1",
+      art: "line",
     });
   });
 

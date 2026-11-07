@@ -25,6 +25,7 @@ fn line(from: (f64, f64), to: (f64, f64), width: f64, color: [u8; 4]) -> Stroke 
         id: StrokeId::new(),
         base_width: width,
         color,
+        art: celframe_core::Art::Line,
         samples: vec![
             StrokeSample {
                 x: from.0,

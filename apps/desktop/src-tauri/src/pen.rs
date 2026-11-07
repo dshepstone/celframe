@@ -1,6 +1,6 @@
 //! A stroke being drawn with the pen. See `docs/specs/pen-input.md`.
 
-use celframe_core::{DrawingId, LayerId, Project, SceneId, Stroke, StrokeId, StrokeSample};
+use celframe_core::{Art, DrawingId, LayerId, Project, SceneId, Stroke, StrokeId, StrokeSample};
 use celframe_geom::StrokeSmoother;
 use serde::Deserialize;
 
@@ -19,6 +19,9 @@ pub struct PenOptions {
     pub color: [u8; 4],
     /// The layer to draw on. None means the topmost visible, unlocked layer.
     pub layer: Option<LayerId>,
+    /// The part of the drawing to draw on. Line art if the UI sends none.
+    #[serde(default)]
+    pub art: Art,
 }
 
 impl Default for PenOptions {
@@ -27,6 +30,7 @@ impl Default for PenOptions {
             width: PEN_WIDTH,
             color: PEN_COLOR,
             layer: None,
+            art: Art::Line,
         }
     }
 }
@@ -96,6 +100,7 @@ impl PenStroke {
             id: StrokeId::new(),
             base_width: options.width,
             color: options.color,
+            art: options.art,
             samples: vec![first],
         };
         let mut smoother = StrokeSmoother::new(min_distance);

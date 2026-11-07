@@ -663,12 +663,14 @@ mod tests {
             width: 3.5,
             color: [200, 10, 20, 255],
             layer: Some(bottom),
+            art: celframe_core::Art::Colour,
         };
         session.pen_down(sample(0.0, 0.0), 0.1, options).unwrap();
         session.pen_up().unwrap();
         let stroke = &strokes_at_frame_0(&session)[0];
         assert_eq!(stroke.base_width, 3.5);
         assert_eq!(stroke.color, [200, 10, 20, 255]);
+        assert_eq!(stroke.art, celframe_core::Art::Colour);
         assert!(session.project().scenes[0].layers[1].drawings.is_empty());
     }
 

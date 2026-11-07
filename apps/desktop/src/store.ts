@@ -5,6 +5,7 @@ import {
   type Command,
   type DocumentView,
   type Layer,
+  type Art,
   type PenOptions,
   type RecoveryInfo,
   type ViewChange,
@@ -72,6 +73,8 @@ export interface AppState {
   brushColor: Rgba;
   /** The layer chosen in the Layers panel, if any. */
   activeLayer: string | null;
+  /** The part of the drawing the pen draws on. */
+  art: Art;
   tool: Tool;
   /** Space is held, which pans with any tool. */
   spaceHeld: boolean;
@@ -101,6 +104,8 @@ export interface AppState {
   addLayer: () => Promise<void>;
   penOptions: () => PenOptions;
   setTool: (tool: Tool) => void;
+  setArt: (art: Art) => void;
+  toggleArt: () => void;
   setSpaceHeld: (held: boolean) => void;
   changeView: (change: ViewChange) => Promise<void>;
 }
@@ -148,6 +153,7 @@ export const useApp = create<AppState>((set, get) => {
     brushWidth: 10,
     brushColor: [0, 0, 0, 255],
     activeLayer: null,
+    art: "line",
     tool: "pen",
     spaceHeld: false,
     view: null,
@@ -234,8 +240,11 @@ export const useApp = create<AppState>((set, get) => {
       }
     },
     penOptions: () => {
-      const { brushWidth, brushColor, activeLayer } = get();
-      return { width: brushWidth, color: brushColor, layer: activeLayer };
+      const { brushWidth, brushColor, activeLayer, art } = get();
+      return { width: brushWidth, color: brushColor, layer: activeLayer, art };
     },
+    setArt: (art) => set({ art }),
+    toggleArt: () =>
+      set(({ art }) => ({ art: art === "line" ? "colour" : "line" })),
   };
 });
