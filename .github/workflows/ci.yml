@@ -41,6 +41,13 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo nextest run --workspace --no-tests=pass
+      # The golden-image test writes its render here when it doesn't match the reference.
+      - uses: actions/upload-artifact@v5
+        if: failure()
+        with:
+          name: golden-${{ matrix.os }}
+          path: target/golden/
+          if-no-files-found: ignore
       - run: cargo test --workspace --doc
 
   js:

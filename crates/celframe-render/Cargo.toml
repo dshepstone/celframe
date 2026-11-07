@@ -16,3 +16,8 @@ celframe-core = { version = "0.0.0", path = "../celframe-core" }
 celframe-geom = { version = "0.0.0", path = "../celframe-geom" }
 pollster = "1.0.1"
 wgpu = "30.0.1"
+
+[dev-dependencies]
+celframe-format = { path = "../celframe-format" }
+png = "0.18.1"
+tempfile = "3.27.0"
