@@ -5,11 +5,11 @@ import { CommandPalette } from "./CommandPalette";
 import { RecoveryDialog } from "./RecoveryDialog";
 import { useApp } from "./store";
 import { ColourPanel } from "./studio/ColourPanel";
+import { RedoIcon, UndoIcon } from "./studio/icons";
 import { LayersPanel } from "./studio/LayersPanel";
 import { ToolProperties } from "./studio/ToolProperties";
 import { StatusBar } from "./studio/StatusBar";
 import { Timeline } from "./studio/Timeline";
-import { ToolOptions } from "./studio/ToolOptions";
 import { ToolRail } from "./studio/ToolRail";
 import { UnsavedChangesDialog } from "./UnsavedChangesDialog";
 import { useNativeCanvas } from "./useNativeCanvas";
@@ -28,6 +28,9 @@ export const MODES = [
 function isTextField(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && target.matches("input, textarea");
 }
+
+const headerIcon =
+  "flex h-7 w-7 items-center justify-center rounded-md text-text-muted outline-none hover:bg-surface-sunken hover:text-text focus-visible:outline-2 focus-visible:outline-focus-ring disabled:opacity-40";
 
 export function App() {
   const {
@@ -336,6 +339,28 @@ export function App() {
           onChange={() => undefined}
         />
         <div className="flex-1" />
+        <div role="group" aria-label="History" className="mr-2 flex gap-1">
+          <button
+            type="button"
+            aria-label="Undo"
+            title="Undo (Ctrl+Z)"
+            disabled={!doc?.canUndo}
+            onClick={() => void undo()}
+            className={headerIcon}
+          >
+            <UndoIcon />
+          </button>
+          <button
+            type="button"
+            aria-label="Redo"
+            title="Redo (Ctrl+Shift+Z)"
+            disabled={!doc?.canRedo}
+            onClick={() => void redo()}
+            className={headerIcon}
+          >
+            <RedoIcon />
+          </button>
+        </div>
         <button
           type="button"
           onClick={() => setPaletteOpen(true)}
@@ -344,8 +369,6 @@ export function App() {
           Search commands <kbd className="ml-1 font-sans">Ctrl+K</kbd>
         </button>
       </header>
-
-      <ToolOptions />
 
       <div className="flex min-h-0 flex-1">
         <ToolRail />

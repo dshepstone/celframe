@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -167,6 +168,25 @@ describe("App shell", () => {
     await userEvent.keyboard("{Delete}");
     expect(backend.deleteSelection).toHaveBeenCalledOnce();
     await waitFor(() => expect(screen.queryByText("1 selected")).toBeNull());
+  });
+
+  it("shows each tool's settings in the Tool properties panel", async () => {
+    vi.mocked(backend.undo).mockResolvedValue(view());
+    vi.mocked(backend.getDocument).mockResolvedValue(view({ canUndo: true }));
+    render(<App />);
+    await screen.findByText("Bouncing ball");
+    const panel = screen.getByRole("region", { name: "Tool properties" });
+    expect(panel.textContent).toContain("Pen");
+    expect(screen.getByRole("spinbutton", { name: "Brush size" })).toBeTruthy();
+    expect(screen.queryByRole("toolbar", { name: "Tool options" })).toBeNull();
+
+    await userEvent.keyboard("u");
+    expect(screen.getByRole("radiogroup", { name: "Shape" })).toBeTruthy();
+    await userEvent.keyboard("h");
+    expect(within(panel).getByRole("button", { name: "Fit" })).toBeTruthy();
+
+    await userEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(backend.undo).toHaveBeenCalledOnce();
   });
 
   it("transforms and arranges the selection from the tool properties", async () => {
