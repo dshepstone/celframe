@@ -7,6 +7,7 @@ import {
   type Layer,
   type Art,
   type PenOptions,
+  type SelectionEdit,
   type ShapeKind,
   type RecoveryInfo,
   type ViewChange,
@@ -82,6 +83,10 @@ export interface AppState {
   eraseWholeStrokes: boolean;
   shapeKind: ShapeKind;
   polygonSides: number;
+  /** Width and height fields keep their ratio. */
+  lockProportions: boolean;
+  /** Scaling the selection also scales stroke widths. */
+  scaleStrokeWidths: boolean;
   tool: Tool;
   /** Space is held, which pans with any tool. */
   spaceHeld: boolean;
@@ -121,6 +126,9 @@ export interface AppState {
   clearSelection: () => Promise<void>;
   deleteSelection: () => Promise<void>;
   nudgeSelection: (dx: number, dy: number) => Promise<void>;
+  editSelection: (edit: SelectionEdit) => Promise<void>;
+  setLockProportions: (lock: boolean) => void;
+  setScaleStrokeWidths: (scale: boolean) => void;
   setSpaceHeld: (held: boolean) => void;
   changeView: (change: ViewChange) => Promise<void>;
 }
@@ -175,6 +183,8 @@ export const useApp = create<AppState>((set, get) => {
     eraseWholeStrokes: false,
     shapeKind: "rectangle",
     polygonSides: 5,
+    lockProportions: true,
+    scaleStrokeWidths: false,
     tool: "pen",
     spaceHeld: false,
     view: null,
@@ -320,6 +330,12 @@ export const useApp = create<AppState>((set, get) => {
       if ((get().document?.selection.length ?? 0) === 0) return;
       await sync(backend.deleteSelection());
     },
+    editSelection: async (edit) => {
+      if ((get().document?.selection.length ?? 0) === 0) return;
+      await sync(backend.editSelection(edit));
+    },
+    setLockProportions: (lockProportions) => set({ lockProportions }),
+    setScaleStrokeWidths: (scaleStrokeWidths) => set({ scaleStrokeWidths }),
     nudgeSelection: async (dx, dy) => {
       if ((get().document?.selection.length ?? 0) === 0) return;
       await sync(backend.nudgeSelection(dx, dy));

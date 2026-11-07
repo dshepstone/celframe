@@ -3,7 +3,10 @@
 use celframe_core::{
     Art, Command, Drawing, DrawingId, LayerId, Project, SceneId, Stroke, StrokeId, StrokeSample,
 };
-use celframe_geom::{distance_to_stroke, stroke_bounds, stroke_touches_box, union};
+use celframe_geom::{
+    Affine, centreline_bounds, distance_to_stroke, stroke_bounds, stroke_touches_box, union,
+};
+use serde::Deserialize;
 
 /// The selection outline's colour and widths in device pixels.
 const OUTLINE: [u8; 4] = [40, 120, 240, 255];
@@ -79,6 +82,185 @@ impl Selection {
             .into_iter()
             .map(|s| (s.id, s.samples.clone()))
             .collect()
+    }
+}
+
+/// An edit to the whole selection. See `docs/specs/transform-and-arrange.md`.
+#[derive(Clone, Copy, Debug, PartialEq, Deserialize)]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum SelectionEdit {
+    /// Moves the centreline box's centre to `x`, `y` and scales it to `width` by `height`.
+    SetBounds {
+        x: f64,
+        y: f64,
+        width: f64,
+        height: f64,
+        scale_widths: bool,
+    },
+    /// Turns counter-clockwise about the box's centre.
+    Rotate {
+        degrees: f64,
+    },
+    /// Mirrors about the box's centre.
+    Flip {
+        horizontal: bool,
+    },
+    Arrange {
+        to: Arrange,
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Arrange {
+    Front,
+    Forward,
+    Backward,
+    Back,
+}
+
+impl Selection {
+    /// The box around the selected strokes' centrelines.
+    pub fn centreline_bounds(&self, project: &Project) -> Option<[f64; 4]> {
+        centreline_bounds(self.existing(project))
+    }
+
+    /// The command for an edit, or None when it changes nothing.
+    pub fn edit(&self, project: &Project, edit: SelectionEdit) -> Result<Option<Command>, String> {
+        if let SelectionEdit::Arrange { to } = edit {
+            return Ok(self.arrange(project, to));
+        }
+        let Some([x0, y0, x1, y1]) = self.centreline_bounds(project) else {
+            return Ok(None);
+        };
+        let centre = [(x0 + x1) / 2.0, (y0 + y1) / 2.0];
+        let (transform, width_scale) = match edit {
+            SelectionEdit::SetBounds {
+                x,
+                y,
+                width,
+                height,
+                scale_widths,
+            } => {
+                let valid = |v: f64| v.is_finite() && v > 0.0;
+                if !x.is_finite() || !y.is_finite() || !valid(width) || !valid(height) {
+                    return Err("Those sizes aren't valid.".to_owned());
+                }
+                // An axis with no extent can't be scaled.
+                let factor = |target: f64, current: f64| {
+                    if current > 0.0 { target / current } else { 1.0 }
+                };
+                let (sx, sy) = (factor(width, x1 - x0), factor(height, y1 - y0));
+                let mut transform = Affine::scale_about(centre, sx, sy);
+                transform.e += x - centre[0];
+                transform.f += y - centre[1];
+                let widths = if scale_widths { (sx + sy) / 2.0 } else { 1.0 };
+                (transform, widths)
+            }
+            SelectionEdit::Rotate { degrees } => {
+                if !degrees.is_finite() {
+                    return Err("That angle isn't valid.".to_owned());
+                }
+                (Affine::rotate_about(centre, degrees), 1.0)
+            }
+            SelectionEdit::Flip { horizontal } => {
+                let (sx, sy) = if horizontal { (-1.0, 1.0) } else { (1.0, -1.0) };
+                (Affine::scale_about(centre, sx, sy), 1.0)
+            }
+            SelectionEdit::Arrange { .. } => unreachable!("handled above"),
+        };
+        if transform == Affine::IDENTITY && width_scale == 1.0 {
+            return Ok(None);
+        }
+        Ok(Some(self.replaced(project, |stroke| Stroke {
+            base_width: stroke.base_width * width_scale,
+            ..transform.apply_to_stroke(stroke)
+        })))
+    }
+
+    /// Replaces each selected stroke with `change(stroke)`, keeping its ID and position.
+    fn replaced(&self, project: &Project, change: impl Fn(&Stroke) -> Stroke) -> Command {
+        let (scene, layer, drawing) = (self.scene, self.layer, self.drawing);
+        let strokes = self::drawing(project, scene, layer, drawing).map_or(&[][..], |d| &d.strokes);
+        let commands = strokes
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| self.strokes.contains(&s.id))
+            .flat_map(|(index, stroke)| {
+                [
+                    Command::RemoveStroke {
+                        scene,
+                        layer,
+                        drawing,
+                        stroke: stroke.id,
+                    },
+                    Command::AddStroke {
+                        scene,
+                        layer,
+                        drawing,
+                        stroke: change(stroke),
+                        index,
+                    },
+                ]
+            })
+            .collect();
+        Command::Batch { commands }
+    }
+
+    fn arrange(&self, project: &Project, to: Arrange) -> Option<Command> {
+        let (scene, layer, drawing) = (self.scene, self.layer, self.drawing);
+        let strokes = &self::drawing(project, scene, layer, drawing)?.strokes;
+        let picked = |s: &&Stroke| self.strokes.contains(&s.id);
+        let mut order: Vec<&Stroke> = strokes.iter().collect();
+        match to {
+            Arrange::Front => order.sort_by_key(|s| picked(s)),
+            Arrange::Back => order.sort_by_key(|s| !picked(s)),
+            Arrange::Forward => {
+                for i in (0..order.len().saturating_sub(1)).rev() {
+                    if picked(&order[i]) && !picked(&order[i + 1]) {
+                        order.swap(i, i + 1);
+                    }
+                }
+            }
+            Arrange::Backward => {
+                for i in 1..order.len() {
+                    if picked(&order[i]) && !picked(&order[i - 1]) {
+                        order.swap(i, i - 1);
+                    }
+                }
+            }
+        }
+        if order.iter().zip(strokes).all(|(a, b)| a.id == b.id) {
+            return None;
+        }
+        // Take the selected strokes out, then put each back at its new index, lowest first.
+        let removals = strokes
+            .iter()
+            .filter(picked)
+            .map(|s| Command::RemoveStroke {
+                scene,
+                layer,
+                drawing,
+                stroke: s.id,
+            });
+        let insertions = order
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| picked(s))
+            .map(|(index, s)| Command::AddStroke {
+                scene,
+                layer,
+                drawing,
+                stroke: (*s).clone(),
+                index,
+            });
+        Some(Command::Batch {
+            commands: removals.chain(insertions).collect(),
+        })
     }
 }
 

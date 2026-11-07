@@ -10,7 +10,7 @@ use celframe_geom::{Constraints, Shape, shape_samples};
 
 use crate::eraser::EraserDrag;
 use crate::pen::{self, PenOptions, PenStroke, PenTool};
-use crate::select::{self, SelectDrag, Selection};
+use crate::select::{self, SelectDrag, Selection, SelectionEdit};
 use serde::Serialize;
 
 pub struct Session {
@@ -80,6 +80,8 @@ pub struct DocumentView {
     pub path: Option<PathBuf>,
     /// The selected strokes. See `docs/specs/selection.md`.
     pub selection: Vec<StrokeId>,
+    /// The box around the selected strokes' centrelines, `[min_x, min_y, max_x, max_y]`.
+    pub selection_bounds: Option<[f64; 4]>,
 }
 
 impl Session {
@@ -119,6 +121,10 @@ impl Session {
             dirty: self.history.is_dirty(),
             path: self.path.clone(),
             selection: self.selected_ids(),
+            selection_bounds: self
+                .selection
+                .as_ref()
+                .and_then(|s| s.centreline_bounds(&self.project)),
         }
     }
 
@@ -819,6 +825,21 @@ impl Session {
         Ok(self.view())
     }
 
+    /// Transforms or rearranges the selected strokes as one undo step.
+    pub fn edit_selection(&mut self, edit: SelectionEdit) -> Result<DocumentView, String> {
+        self.end_drags();
+        let command = match self.selection.as_ref() {
+            Some(selection) => selection.edit(&self.project, edit)?,
+            None => None,
+        };
+        if let Some(command) = command {
+            self.history
+                .execute(&mut self.project, command)
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(self.view())
+    }
+
     /// Moves the selected strokes by `delta` scene units as one undo step.
     pub fn nudge_selection(&mut self, delta: [f64; 2]) -> Result<DocumentView, String> {
         self.end_drags();
@@ -1260,6 +1281,107 @@ mod tests {
         session.pen_move(&[sample(90.0, 0.0)]).unwrap();
         session.clear_selection();
         assert_eq!(session.project(), &drawn);
+    }
+
+    fn ids(session: &Session) -> Vec<StrokeId> {
+        strokes_at_frame_0(session).iter().map(|s| s.id).collect()
+    }
+
+    #[test]
+    fn typed_bounds_move_and_scale_exactly_and_undo_in_one_step() {
+        let mut session = session_with_lines(&[0.0, 50.0]);
+        session.select_all(None, celframe_core::Art::Line).unwrap();
+        let before = session.project().clone();
+        let view = session.view();
+        assert_eq!(view.selection_bounds, Some([0.0, 0.0, 100.0, 50.0]));
+
+        let edit = SelectionEdit::SetBounds {
+            x: 0.0,
+            y: 0.0,
+            width: 200.0,
+            height: 25.0,
+            scale_widths: true,
+        };
+        let view = session.edit_selection(edit).unwrap();
+        assert_eq!(view.selection_bounds, Some([-100.0, -12.5, 100.0, 12.5]));
+        assert_eq!(view.selection, ids(&session), "IDs are kept");
+        // Widths scale by the mean of 2 and 0.5.
+        assert_eq!(
+            strokes_at_frame_0(&session)[0].base_width,
+            pen::PEN_WIDTH * 1.25
+        );
+
+        session.undo().unwrap();
+        assert_eq!(session.project(), &before);
+    }
+
+    #[test]
+    fn a_flat_selection_keeps_its_flat_axis() {
+        let mut session = session_with_lines(&[0.0]);
+        session.select_all(None, celframe_core::Art::Line).unwrap();
+        let edit = SelectionEdit::SetBounds {
+            x: 50.0,
+            y: 0.0,
+            width: 50.0,
+            height: 999.0,
+            scale_widths: false,
+        };
+        let view = session.edit_selection(edit).unwrap();
+        assert_eq!(view.selection_bounds, Some([25.0, 0.0, 75.0, 0.0]));
+        assert_eq!(strokes_at_frame_0(&session)[0].base_width, pen::PEN_WIDTH);
+        let bad = SelectionEdit::SetBounds {
+            x: 0.0,
+            y: 0.0,
+            width: -1.0,
+            height: 1.0,
+            scale_widths: false,
+        };
+        assert!(session.edit_selection(bad).is_err());
+    }
+
+    #[test]
+    fn rotate_and_flip_about_the_centre() {
+        let mut session = session_with_lines(&[0.0]);
+        session.select_all(None, celframe_core::Art::Line).unwrap();
+        let view = session
+            .edit_selection(SelectionEdit::Rotate { degrees: 90.0 })
+            .unwrap();
+        assert_eq!(view.selection_bounds, Some([50.0, -50.0, 50.0, 50.0]));
+        let first = strokes_at_frame_0(&session)[0].samples[0];
+        session
+            .edit_selection(SelectionEdit::Flip { horizontal: false })
+            .unwrap();
+        let flipped = strokes_at_frame_0(&session)[0].samples[0];
+        assert_eq!((flipped.x, flipped.y), (first.x, -first.y));
+    }
+
+    #[test]
+    fn arranging_changes_drawing_order_and_undoes_in_one_step() {
+        use crate::select::Arrange;
+        let mut session = session_with_lines(&[0.0, 20.0, 40.0, 60.0]);
+        let [a, b, c, d] = ids(&session)[..] else {
+            panic!("four strokes")
+        };
+        // Select a and b by clicking them with Shift.
+        click(&mut session, 50.0, 0.0);
+        session.set_modifiers(Constraints {
+            constrain: true,
+            from_centre: false,
+        });
+        click(&mut session, 50.0, 20.0);
+        let arrange = |session: &mut Session, to| {
+            session
+                .edit_selection(SelectionEdit::Arrange { to })
+                .unwrap();
+            ids(session)
+        };
+        assert_eq!(arrange(&mut session, Arrange::Forward), [c, a, b, d]);
+        assert_eq!(arrange(&mut session, Arrange::Front), [c, d, a, b]);
+        assert_eq!(arrange(&mut session, Arrange::Backward), [c, a, b, d]);
+        assert_eq!(arrange(&mut session, Arrange::Back), [a, b, c, d]);
+        assert_eq!(arrange(&mut session, Arrange::Back), [a, b, c, d]);
+        session.undo().unwrap();
+        assert_eq!(ids(&session), [c, a, b, d], "each change was one step");
     }
 
     #[test]

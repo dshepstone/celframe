@@ -26,6 +26,7 @@ vi.mock("./backend", () => ({
     clearSelection: vi.fn(),
     deleteSelection: vi.fn(),
     nudgeSelection: vi.fn(),
+    editSelection: vi.fn(),
     onCloseRequested: vi.fn(() => Promise.resolve(() => undefined)),
   },
 }));
@@ -166,6 +167,68 @@ describe("App shell", () => {
     await userEvent.keyboard("{Delete}");
     expect(backend.deleteSelection).toHaveBeenCalledOnce();
     await waitFor(() => expect(screen.queryByText("1 selected")).toBeNull());
+  });
+
+  it("transforms and arranges the selection from the tool properties", async () => {
+    const selected = view({
+      selection: ["k1"],
+      selectionBounds: [0, 0, 100, 50],
+    });
+    vi.mocked(backend.getDocument).mockResolvedValue(selected);
+    vi.mocked(backend.editSelection).mockResolvedValue(selected);
+    render(<App />);
+    await screen.findByText("Bouncing ball");
+    await userEvent.keyboard("v");
+
+    const width = screen.getByRole("textbox", { name: "Width" });
+    expect((width as HTMLInputElement).value).toBe("100");
+    await userEvent.clear(width);
+    await userEvent.type(width, "200{Enter}");
+    expect(backend.editSelection).toHaveBeenLastCalledWith({
+      type: "setBounds",
+      x: 50,
+      y: 25,
+      width: 200,
+      height: 100,
+      scaleWidths: false,
+    });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Flip vertically" }),
+    );
+    expect(backend.editSelection).toHaveBeenLastCalledWith({
+      type: "flip",
+      horizontal: false,
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Send to back" }));
+    expect(backend.editSelection).toHaveBeenLastCalledWith({
+      type: "arrange",
+      to: "back",
+    });
+    await userEvent.keyboard("{Control>}]{/Control}");
+    expect(backend.editSelection).toHaveBeenLastCalledWith({
+      type: "arrange",
+      to: "forward",
+    });
+    await userEvent.keyboard("{Shift>}h{/Shift}");
+    expect(backend.editSelection).toHaveBeenLastCalledWith({
+      type: "flip",
+      horizontal: true,
+    });
+    expect(useApp.getState().tool).toBe("select");
+  });
+
+  it("disables the transform controls with nothing selected", async () => {
+    render(<App />);
+    await screen.findByText("Bouncing ball");
+    await userEvent.keyboard("v");
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Flip horizontally",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
   });
 
   it("erases with the eraser's own size and mode", async () => {

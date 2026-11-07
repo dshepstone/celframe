@@ -138,6 +138,16 @@ fn delete_selection(
 }
 
 #[tauri::command]
+fn edit_selection(
+    app: AppHandle,
+    state: State<'_, SharedSession>,
+    edit: select::SelectionEdit,
+) -> Result<DocumentView, String> {
+    let result = lock(&state)?.edit_selection(edit);
+    redrawn(&app, result)
+}
+
+#[tauri::command]
 fn nudge_selection(
     app: AppHandle,
     state: State<'_, SharedSession>,
@@ -609,7 +619,8 @@ pub fn run() {
             select_all,
             clear_selection,
             delete_selection,
-            nudge_selection
+            nudge_selection,
+            edit_selection
         ])
         .build(tauri::generate_context!())
         .expect("the app failed to start")

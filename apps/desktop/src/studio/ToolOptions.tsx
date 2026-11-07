@@ -161,7 +161,7 @@ export function ToolOptions() {
       {tool === "select" ? (
         <>
           <span className="font-medium">Select</span>
-          <span className="text-text-muted">
+          <span className="min-w-0 truncate whitespace-nowrap text-text-muted">
             Drag to move. Shift-click to add. Arrow keys nudge.
           </span>
         </>

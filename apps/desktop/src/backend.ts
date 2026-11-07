@@ -100,7 +100,25 @@ export interface DocumentView {
   path: string | null;
   /** IDs of the selected strokes. */
   selection: string[];
+  /** The box around the selection's centrelines: [minX, minY, maxX, maxY]. */
+  selectionBounds: [number, number, number, number] | null;
 }
+
+export type Arrange = "front" | "forward" | "backward" | "back";
+
+/** An edit to the whole selection. See docs/specs/transform-and-arrange.md. */
+export type SelectionEdit =
+  | {
+      type: "setBounds";
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      scaleWidths: boolean;
+    }
+  | { type: "rotate"; degrees: number }
+  | { type: "flip"; horizontal: boolean }
+  | { type: "arrange"; to: Arrange };
 
 /** A recovery copy left by a run that didn't exit normally. */
 export interface RecoveryInfo {
@@ -167,6 +185,8 @@ export const backend = {
   deleteSelection: () => invoke<DocumentView>("delete_selection"),
   nudgeSelection: (dx: number, dy: number) =>
     invoke<DocumentView>("nudge_selection", { dx, dy }),
+  editSelection: (edit: SelectionEdit) =>
+    invoke<DocumentView>("edit_selection", { edit }),
   closeWindow: async (): Promise<void> => {
     await invoke("close_window");
   },

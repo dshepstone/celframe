@@ -17,6 +17,7 @@ vi.mock("./backend", () => ({
         dirty: false,
         path: null,
         selection: [],
+        selectionBounds: null,
       }),
     ),
     getRecovery: vi.fn(() => Promise.resolve(null)),

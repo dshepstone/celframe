@@ -34,6 +34,7 @@ export function documentView(
     dirty: false,
     path: null,
     selection: [],
+    selectionBounds: null,
     ...overrides,
   };
 }

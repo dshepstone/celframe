@@ -35,6 +35,7 @@ const view = (name: string, dirty = false): DocumentView => ({
   dirty,
   path: null,
   selection: [],
+  selectionBounds: null,
 });
 
 beforeEach(() => {
