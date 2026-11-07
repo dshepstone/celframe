@@ -32,6 +32,8 @@ pub struct Session {
     select: Option<SelectDrag>,
     /// The modifier keys held at the last pointer event.
     modifiers: Constraints,
+    /// The selection shows handles, because the Select tool is active.
+    handles_visible: bool,
 }
 
 /// A shape being dragged out. Its stroke is added on the first movement that gives it a size.
@@ -98,6 +100,7 @@ impl Session {
             selection: None,
             select: None,
             modifiers: Constraints::default(),
+            handles_visible: false,
         }
     }
 
@@ -281,10 +284,15 @@ impl Session {
         }
         let first = pen::clean(sample).ok_or("That pen position isn't valid.")?;
         let (scene, layer, drawing) = pen::find_target(&self.project, 0, options.layer)?;
-        if options.tool == PenTool::Select {
-            // 8 half-pixels is 4 device pixels.
+        if let PenTool::Select {
+            lasso,
+            scale_widths,
+        } = options.tool
+        {
             let target = (scene, layer, drawing, options.art);
-            return self.select_down([first.x, first.y], 8.0 * min_distance, target);
+            // `min_distance` is half a device pixel.
+            let pixel = 2.0 * min_distance;
+            return self.select_down([first.x, first.y], pixel, target, (lasso, scale_widths));
         }
         if let PenTool::Erase { whole_strokes } = options.tool {
             self.history.begin_group();
@@ -571,30 +579,45 @@ impl Session {
         })
     }
 
-    /// Outlines for the selection and any box being dragged out. `pixel` is one device pixel
-    /// in scene units.
+    /// Shows or hides the selection's handles. The UI shows them while the Select tool is on.
+    pub fn set_handles_visible(&mut self, visible: bool) {
+        self.handles_visible = visible;
+    }
+
+    /// Strokes for the canvas to draw over the scene: the selection, its handles, and any box
+    /// or lasso being dragged out. `pixel` is one device pixel in scene units.
     pub fn overlay(&self, pixel: f64) -> Vec<Stroke> {
         let selection = self
             .selection
             .as_ref()
             .and_then(|s| s.bounds(&self.project));
-        let marquee = match &self.select {
-            Some(SelectDrag::Marquee { start, last, .. }) if start != last => Some([
-                start[0].min(last[0]),
-                start[1].min(last[1]),
-                start[0].max(last[0]),
-                start[1].max(last[1]),
-            ]),
-            _ => None,
+        let mut overlay = select::Overlay {
+            selection,
+            handles: self.handles_visible,
+            ..Default::default()
         };
-        select::overlay(selection, marquee, pixel)
+        match &self.select {
+            Some(SelectDrag::Marquee { start, last, .. }) if start != last => {
+                overlay.marquee = Some([
+                    start[0].min(last[0]),
+                    start[1].min(last[1]),
+                    start[0].max(last[0]),
+                    start[1].max(last[1]),
+                ]);
+            }
+            Some(SelectDrag::Lasso { points, .. }) => overlay.lasso = Some(points),
+            Some(SelectDrag::Transform { .. }) => overlay.handles = false,
+            _ => {}
+        }
+        overlay.strokes(pixel)
     }
 
     fn select_down(
         &mut self,
         point: [f64; 2],
-        tolerance: f64,
+        pixel: f64,
         (scene, layer, drawing, art): (SceneId, LayerId, Option<DrawingId>, celframe_core::Art),
+        (lasso, scale_widths): (bool, bool),
     ) -> Result<(), String> {
         let Some(drawing) = drawing else {
             self.selection = None;
@@ -619,7 +642,40 @@ impl Session {
         selection
             .strokes
             .retain(|id| target.strokes.iter().any(|s| s.id == *id));
-        let hit = select::hit(target, art, point, tolerance);
+
+        // Handles win over strokes under them.
+        if self.handles_visible
+            && let Some(area) = selection.bounds(&self.project)
+            && let Some(handle) = select::handle_at(area, point, pixel)
+        {
+            let originals = selection.stroke_originals(&self.project);
+            self.select = Some(SelectDrag::Transform {
+                handle,
+                area,
+                start: point,
+                last: point,
+                originals,
+                scale_widths,
+            });
+            return Ok(());
+        }
+
+        // 4 device pixels beyond a stroke's edge still hits it.
+        let hit = select::hit(target, art, point, 4.0 * pixel);
+        let region = |add: bool| {
+            if lasso {
+                SelectDrag::Lasso {
+                    points: vec![point],
+                    add,
+                }
+            } else {
+                SelectDrag::Marquee {
+                    start: point,
+                    last: point,
+                    add,
+                }
+            }
+        };
 
         if self.modifiers.constrain {
             match hit {
@@ -630,13 +686,7 @@ impl Session {
                         selection.strokes.push(id);
                     }
                 }
-                None => {
-                    self.select = Some(SelectDrag::Marquee {
-                        start: point,
-                        last: point,
-                        add: true,
-                    });
-                }
+                None => self.select = Some(region(true)),
             }
             return Ok(());
         }
@@ -653,11 +703,7 @@ impl Session {
             None if inside => Some(Vec::new()),
             None => {
                 selection.strokes.clear();
-                self.select = Some(SelectDrag::Marquee {
-                    start: point,
-                    last: point,
-                    add: false,
-                });
+                self.select = Some(region(false));
                 return Ok(());
             }
         };
@@ -676,8 +722,42 @@ impl Session {
             return Ok(());
         };
         let point = [point.x, point.y];
+        let modifiers = self.modifiers;
         match self.select.as_mut() {
             Some(SelectDrag::Marquee { last, .. }) => *last = point,
+            Some(SelectDrag::Lasso { points, .. }) => {
+                // Every sample, so the lasso follows the pointer closely.
+                for sample in samples.iter().copied().filter_map(pen::clean) {
+                    let next = [sample.x, sample.y];
+                    if points.last() != Some(&next) {
+                        points.push(next);
+                    }
+                }
+            }
+            Some(SelectDrag::Transform {
+                handle,
+                area,
+                start,
+                last,
+                originals,
+                scale_widths,
+            }) => {
+                *last = point;
+                let (transform, factors) = select::handle_transform(
+                    *handle,
+                    *area,
+                    *start,
+                    point,
+                    modifiers.constrain,
+                    modifiers.from_centre,
+                );
+                let widths = select::width_scale(factors, *scale_widths);
+                let preview = select::transform_originals(originals, transform, widths);
+                if let Some(selection) = self.selection.as_ref() {
+                    // A preview only: the change becomes one undoable edit when the pen lifts.
+                    selection.preview(&mut self.project, &preview);
+                }
+            }
             Some(SelectDrag::Move {
                 start,
                 last,
@@ -704,31 +784,74 @@ impl Session {
         Ok(())
     }
 
+    /// Adds `found` to the selection, or makes it the selection unless `add`.
+    fn choose(&mut self, found: Vec<StrokeId>, add: bool) {
+        let Some(selection) = self.selection.as_mut() else {
+            return;
+        };
+        if !add {
+            selection.strokes.clear();
+        }
+        for id in found {
+            if !selection.strokes.contains(&id) {
+                selection.strokes.push(id);
+            }
+        }
+    }
+
     fn select_up(&mut self) -> Result<(), String> {
+        let Some(selection) = self.selection.clone() else {
+            self.select = None;
+            return Ok(());
+        };
+        let target = |project: &Project| {
+            select::drawing(project, selection.scene, selection.layer, selection.drawing).cloned()
+        };
         match self.select.take() {
             Some(SelectDrag::Marquee { start, last, add }) => {
-                let Some(selection) = self.selection.as_mut() else {
-                    return Ok(());
-                };
-                if start == last {
-                    return Ok(());
+                if start != last
+                    && let Some(drawing) = target(&self.project)
+                {
+                    let found = select::in_box(&drawing, selection.art, start, last);
+                    self.choose(found, add);
                 }
-                let found = select::drawing(
-                    &self.project,
-                    selection.scene,
-                    selection.layer,
-                    selection.drawing,
-                )
-                .map_or_else(Vec::new, |d| select::in_box(d, selection.art, start, last));
-                if !add {
-                    selection.strokes.clear();
-                }
-                for id in found {
-                    if !selection.strokes.contains(&id) {
-                        selection.strokes.push(id);
+                Ok(())
+            }
+            Some(SelectDrag::Lasso { points, add }) => {
+                if let Some(drawing) = target(&self.project) {
+                    let found = select::in_lasso(&drawing, selection.art, &points);
+                    if !found.is_empty() || !add {
+                        self.choose(found, add);
                     }
                 }
                 Ok(())
+            }
+            Some(SelectDrag::Transform {
+                handle,
+                area,
+                start,
+                last,
+                originals,
+                scale_widths,
+            }) => {
+                // Back to the strokes as they were, then the change as one edit.
+                selection.preview(&mut self.project, &originals);
+                if start == last {
+                    return Ok(());
+                }
+                let (transform, factors) = select::handle_transform(
+                    handle,
+                    area,
+                    start,
+                    last,
+                    self.modifiers.constrain,
+                    self.modifiers.from_centre,
+                );
+                let widths = select::width_scale(factors, scale_widths);
+                let command = selection.transformed(&self.project, transform, widths);
+                self.history
+                    .execute(&mut self.project, command)
+                    .map_err(|e| e.to_string())
             }
             Some(SelectDrag::Move {
                 start,
@@ -736,9 +859,6 @@ impl Session {
                 originals,
                 click,
             }) => {
-                let Some(selection) = self.selection.clone() else {
-                    return Ok(());
-                };
                 let delta = [last[0] - start[0], last[1] - start[1]];
                 // Back to where the drag started, then the move as one edit.
                 let _ = selection
@@ -758,14 +878,22 @@ impl Session {
         }
     }
 
-    /// Ends a Select drag without changing anything, undoing a move's preview.
+    /// Ends a Select drag without changing anything, undoing any preview.
     fn cancel_select(&mut self) {
-        if let Some(SelectDrag::Move { originals, .. }) = self.select.take()
-            && let Some(selection) = self.selection.as_ref()
-        {
-            let _ = selection
-                .moved(&originals, [0.0, 0.0])
-                .apply(&mut self.project);
+        let Some(selection) = self.selection.as_ref() else {
+            self.select = None;
+            return;
+        };
+        match self.select.take() {
+            Some(SelectDrag::Move { originals, .. }) => {
+                let _ = selection
+                    .moved(&originals, [0.0, 0.0])
+                    .apply(&mut self.project);
+            }
+            Some(SelectDrag::Transform { originals, .. }) => {
+                selection.preview(&mut self.project, &originals);
+            }
+            _ => {}
         }
     }
 
@@ -1187,7 +1315,10 @@ mod tests {
         color: pen::PEN_COLOR,
         layer: None,
         art: celframe_core::Art::Line,
-        tool: PenTool::Select,
+        tool: PenTool::Select {
+            lasso: false,
+            scale_widths: false,
+        },
     };
 
     /// Draws horizontal lines at the given heights, from x = 0 to 100.
@@ -1382,6 +1513,131 @@ mod tests {
         assert_eq!(arrange(&mut session, Arrange::Back), [a, b, c, d]);
         session.undo().unwrap();
         assert_eq!(ids(&session), [c, a, b, d], "each change was one step");
+    }
+
+    fn select_with(lasso: bool, scale_widths: bool) -> PenOptions {
+        PenOptions {
+            tool: PenTool::Select {
+                lasso,
+                scale_widths,
+            },
+            ..SELECT
+        }
+    }
+
+    /// A line from x = 0 to 100 at y = 0, selected, with handles showing. Its painted box is
+    /// 2.5 units bigger all round, and one device pixel is 0.2 scene units.
+    fn selected_line() -> Session {
+        let mut session = session_with_lines(&[0.0]);
+        session.set_handles_visible(true);
+        click(&mut session, 50.0, 0.0);
+        session
+    }
+
+    fn drag(session: &mut Session, options: PenOptions, path: &[(f64, f64)]) {
+        session
+            .pen_down(sample(path[0].0, path[0].1), 0.1, options)
+            .unwrap();
+        for &(x, y) in &path[1..] {
+            session.pen_move(&[sample(x, y)]).unwrap();
+        }
+        session.pen_up().unwrap();
+    }
+
+    #[test]
+    fn a_side_handle_scales_one_way_about_the_opposite_side() {
+        let mut session = selected_line();
+        let before = session.project().clone();
+        // The right handle sits at the middle of the right side. Doubling the painted box
+        // about its left edge, at x = -2.5, puts the ends at 2.5 and 202.5.
+        drag(
+            &mut session,
+            SELECT,
+            &[(102.5, 0.0), (150.0, 0.0), (207.5, 0.0)],
+        );
+        let samples = &strokes_at_frame_0(&session)[0].samples;
+        let (first, last) = (samples[0], samples[samples.len() - 1]);
+        assert!((first.x - 2.5).abs() < 1e-9 && (last.x - 202.5).abs() < 1e-9);
+        assert_eq!((first.y, last.y), (0.0, 0.0), "height unchanged");
+        session.undo().unwrap();
+        assert_eq!(session.project(), &before, "one undo step");
+    }
+
+    #[test]
+    fn the_rotate_handle_turns_about_the_centre_and_snaps_with_shift() {
+        let mut session = selected_line();
+        session.set_modifiers(Constraints {
+            constrain: true,
+            from_centre: false,
+        });
+        // The rotate handle is 24 pixels above the top: 2.5 + 4.8. Dragging round to the
+        // left of the centre, a little off, snaps to a quarter turn.
+        drag(&mut session, SELECT, &[(50.0, 7.3), (42.0, 0.3)]);
+        let samples = &strokes_at_frame_0(&session)[0].samples;
+        assert!(
+            samples.iter().all(|s| (s.x - 50.0).abs() < 1e-9),
+            "now upright"
+        );
+    }
+
+    #[test]
+    fn handles_are_ignored_while_hidden() {
+        let mut session = selected_line();
+        session.set_handles_visible(false);
+        let before = session.project().clone();
+        drag(&mut session, SELECT, &[(102.5, 0.0), (207.5, 0.0)]);
+        assert_eq!(
+            strokes_at_frame_0(&session)[0].samples,
+            before.scenes[0].layers[0].drawings[0].strokes[0]
+                .samples
+                .iter()
+                .map(|s| StrokeSample {
+                    x: s.x + 105.0,
+                    ..*s
+                })
+                .collect::<Vec<_>>(),
+            "the drag moved the stroke instead"
+        );
+    }
+
+    #[test]
+    fn scaling_with_widths_on_scales_stroke_widths() {
+        let mut session = selected_line();
+        drag(
+            &mut session,
+            select_with(false, true),
+            &[(102.5, 0.0), (207.5, 0.0)],
+        );
+        // Width scale is the mean of 2 across and 1 down.
+        assert_eq!(
+            strokes_at_frame_0(&session)[0].base_width,
+            pen::PEN_WIDTH * 1.5
+        );
+    }
+
+    #[test]
+    fn a_lasso_selects_what_it_surrounds() {
+        let mut session = session_with_lines(&[0.0, 50.0]);
+        let ids = ids(&session);
+        let path = [(-10.0, 30.0), (60.0, 30.0), (60.0, 70.0), (-10.0, 70.0)];
+        session
+            .pen_down(sample(path[0].0, path[0].1), 0.1, select_with(true, false))
+            .unwrap();
+        for &(x, y) in &path[1..] {
+            session.pen_move(&[sample(x, y)]).unwrap();
+        }
+        assert_eq!(session.overlay(1.0).len(), 1, "the lasso path is drawn");
+        let view = session.pen_up().unwrap();
+        assert_eq!(view.selection, [ids[1]]);
+    }
+
+    #[test]
+    fn the_overlay_shows_handles_only_when_asked() {
+        let mut session = selected_line();
+        // Outline, then outer and inner for 8 squares, plus the rotate line and two dots.
+        assert_eq!(session.overlay(0.2).len(), 1 + 16 + 3);
+        session.set_handles_visible(false);
+        assert_eq!(session.overlay(0.2).len(), 1);
     }
 
     #[test]

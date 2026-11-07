@@ -28,6 +28,7 @@ vi.mock("./backend", () => ({
     deleteSelection: vi.fn(),
     nudgeSelection: vi.fn(),
     editSelection: vi.fn(),
+    setHandlesVisible: vi.fn(() => Promise.resolve()),
     onCloseRequested: vi.fn(() => Promise.resolve(() => undefined)),
   },
 }));
@@ -158,7 +159,11 @@ describe("App shell", () => {
     render(<App />);
     await screen.findByText("Bouncing ball");
     await userEvent.keyboard("v");
-    expect(useApp.getState().penOptions().tool).toEqual({ type: "select" });
+    expect(useApp.getState().penOptions().tool).toEqual({
+      type: "select",
+      lasso: false,
+      scaleWidths: false,
+    });
 
     await userEvent.keyboard("{Control>}a{/Control}");
     expect(backend.selectAll).toHaveBeenCalledWith({
@@ -312,6 +317,21 @@ describe("App shell", () => {
       horizontal: true,
     });
     expect(useApp.getState().tool).toBe("select");
+  });
+
+  it("shows handles only with the Select tool, and sends the lasso mode", async () => {
+    render(<App />);
+    await screen.findByText("Bouncing ball");
+    await userEvent.keyboard("v");
+    await waitFor(() =>
+      expect(backend.setHandlesVisible).toHaveBeenLastCalledWith(true),
+    );
+    await userEvent.click(screen.getByRole("radio", { name: "Lasso" }));
+    expect(useApp.getState().penOptions().tool).toMatchObject({ lasso: true });
+    await userEvent.keyboard("p");
+    await waitFor(() =>
+      expect(backend.setHandlesVisible).toHaveBeenLastCalledWith(false),
+    );
   });
 
   it("disables the transform controls with nothing selected", async () => {

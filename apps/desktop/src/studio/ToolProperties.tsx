@@ -22,6 +22,7 @@ import { Panel } from "./Panel";
 import {
   ArtSwitch,
   Group,
+  SelectModeSwitch,
   Hint,
   ShapePicker,
   SizeControl,
@@ -533,6 +534,9 @@ export function ToolProperties() {
           <>
             <Group label="Select from">
               <ArtSwitch label="Select from" />
+            </Group>
+            <Group label="Drag selects with">
+              <SelectModeSwitch />
             </Group>
             <SelectProperties />
           </>

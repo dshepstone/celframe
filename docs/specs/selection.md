@@ -11,17 +11,26 @@ The Select tool picks strokes so they can be moved or deleted. Scaling, rotating
 
 ## Picking
 
-| Action                      | Result                                                      |
-| --------------------------- | ----------------------------------------------------------- |
-| Click a stroke              | Selects only that stroke                                    |
-| Shift-click a stroke        | Adds it to the selection, or removes it if already selected |
-| Drag from empty space       | Draws a box. Strokes with any point inside it are selected  |
-| Shift-drag from empty space | Adds the strokes in the box to the selection                |
-| Click empty space           | Clears the selection                                        |
-| `Ctrl+A` / `Cmd+A`          | Selects every stroke in the current part                    |
-| `Escape`                    | Clears the selection                                        |
+| Action                      | Result                                                             |
+| --------------------------- | ------------------------------------------------------------------ |
+| Click a stroke              | Selects only that stroke                                           |
+| Shift-click a stroke        | Adds it to the selection, or removes it if already selected        |
+| Drag from empty space       | Draws a box or lasso. Strokes with any part inside it are selected |
+| Shift-drag from empty space | Adds the strokes in the box to the selection                       |
+| Click empty space           | Clears the selection                                               |
+| `Ctrl+A` / `Cmd+A`          | Selects every stroke in the current part                           |
+| `Escape`                    | Clears the selection                                               |
 
 - A click hits a stroke when it lands on the stroke or within 4 screen pixels of its edge. Where strokes overlap, the one drawn on top wins.
+
+## Box and lasso
+
+The Tool properties panel chooses how dragging from empty space selects:
+
+- **Box:** a rectangle from where the drag starts to where it is now.
+- **Lasso:** a free shape that follows the pointer, closed by a straight line back to the start.
+
+Either way, strokes with any part of their centreline inside the shape are selected, and Shift adds them to the selection. A lasso with fewer than three points, or no area, selects nothing.
 
 ## Moving and deleting
 

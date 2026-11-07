@@ -138,6 +138,17 @@ fn delete_selection(
 }
 
 #[tauri::command]
+fn set_handles_visible(
+    app: AppHandle,
+    state: State<'_, SharedSession>,
+    visible: bool,
+) -> Result<(), String> {
+    lock(&state)?.set_handles_visible(visible);
+    redraw(&app);
+    Ok(())
+}
+
+#[tauri::command]
 fn edit_selection(
     app: AppHandle,
     state: State<'_, SharedSession>,
@@ -620,7 +631,8 @@ pub fn run() {
             clear_selection,
             delete_selection,
             nudge_selection,
-            edit_selection
+            edit_selection,
+            set_handles_visible
         ])
         .build(tauri::generate_context!())
         .expect("the app failed to start")

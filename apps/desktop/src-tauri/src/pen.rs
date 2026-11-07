@@ -44,7 +44,14 @@ pub enum PenTool {
     /// Drag out a shape with the pen's size and colour.
     Shape { shape: ShapeOption },
     /// Select and move strokes.
-    Select,
+    Select {
+        /// Dragging from empty space draws a lasso instead of a box.
+        #[serde(default)]
+        lasso: bool,
+        /// Scaling with handles also scales stroke widths.
+        #[serde(default)]
+        scale_widths: bool,
+    },
 }
 
 /// A shape as the UI names it. See `docs/specs/shape-tools.md`.

@@ -62,6 +62,43 @@ pub fn stroke_touches_box(stroke: &Stroke, area: [f64; 4]) -> bool {
     })
 }
 
+/// True when any of the stroke's centreline lies inside the closed shape `lasso`. The shape is
+/// closed by a line from its last point back to its first. Fewer than three points enclose
+/// nothing.
+pub fn stroke_touches_lasso(stroke: &Stroke, lasso: &[[f64; 2]]) -> bool {
+    if lasso.len() < 3 {
+        return false;
+    }
+    if stroke
+        .samples
+        .iter()
+        .any(|s| inside_polygon([s.x, s.y], lasso))
+    {
+        return true;
+    }
+    // A segment can cross the lasso with both ends outside it.
+    let edges = || (0..lasso.len()).map(|i| (lasso[i], lasso[(i + 1) % lasso.len()]));
+    stroke.samples.windows(2).any(|pair| {
+        let (a, b) = ([pair[0].x, pair[0].y], [pair[1].x, pair[1].y]);
+        edges().any(|(c, d)| segments_cross(a, b, c, d))
+    })
+}
+
+/// Even-odd point-in-polygon test.
+pub fn inside_polygon(point: [f64; 2], polygon: &[[f64; 2]]) -> bool {
+    let [x, y] = point;
+    let mut inside = false;
+    let mut j = polygon.len().wrapping_sub(1);
+    for (i, &[xi, yi]) in polygon.iter().enumerate() {
+        let [xj, yj] = polygon[j];
+        if (yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi {
+            inside = !inside;
+        }
+        j = i;
+    }
+    inside
+}
+
 /// Distance from `p` to the segment, and how far along it the nearest point is, from 0 to 1.
 fn to_segment(p: [f64; 2], a: [f64; 2], b: [f64; 2]) -> (f64, f64) {
     let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
