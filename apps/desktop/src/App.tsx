@@ -7,6 +7,7 @@ import { useApp } from "./store";
 import { ColourPanel } from "./studio/ColourPanel";
 import { RedoIcon, UndoIcon } from "./studio/icons";
 import { LayersPanel } from "./studio/LayersPanel";
+import { ShelfBar } from "./studio/ShelfBar";
 import { ToolProperties } from "./studio/ToolProperties";
 import { StatusBar } from "./studio/StatusBar";
 import { Timeline } from "./studio/Timeline";
@@ -369,6 +370,8 @@ export function App() {
           Search commands <kbd className="ml-1 font-sans">Ctrl+K</kbd>
         </button>
       </header>
+
+      <ShelfBar />
 
       <div className="flex min-h-0 flex-1">
         <ToolRail />
