@@ -21,25 +21,25 @@ How Celframe's interface grows to hold every feature in the inventory without cr
 
 ## Panels
 
-| Panel          | Phase | Purpose                                              |
-| -------------- | ----- | ---------------------------------------------------- |
-| Tool rail      | 1     | Pick the drawing tool                                |
-| Tool options   | 1     | Settings for the current tool                        |
-| Layers         | 1     | Show, lock, order, rename and choose layers          |
-| Colour         | 1     | Swatches and custom colours                          |
-| Timeline       | 1, 3  | Read-only in Phase 1; full timing editing in Phase 3 |
-| Palettes       | 2     | Named, linked project colours                        |
-| Tool presets   | 2     | Saved brush and tool settings                        |
-| Exposure sheet | 3     | Timing by drawing number, frame by frame             |
-| Onion skin     | 3     | Neighbouring-drawing display settings                |
-| Audio          | 3     | Sound tracks and waveforms                           |
-| Library        | 6     | Reusable drawings, parts, poses and templates        |
-| Hierarchy      | 6     | The parent–child structure of a rig                  |
-| Curve editor   | 6     | Keyframe timing and easing                           |
-| Node view      | 7     | How layers, effects and outputs connect              |
-| Properties     | 6, 7  | Values of the selected layer, node or keyframe       |
-| Scripts        | 8     | Run and manage scripts                               |
-| Review         | 9     | Comments and drawn notes                             |
+| Panel           | Phase | Purpose                                              |
+| --------------- | ----- | ---------------------------------------------------- |
+| Tool rail       | 1     | Pick the drawing tool                                |
+| Tool properties | 2     | Every setting of the current tool                    |
+| Layers          | 1     | Show, lock, order, rename and choose layers          |
+| Colour          | 1     | Swatches and custom colours                          |
+| Timeline        | 1, 3  | Read-only in Phase 1; full timing editing in Phase 3 |
+| Palettes        | 2     | Named, linked project colours                        |
+| Tool presets    | 2     | Saved brush and tool settings                        |
+| Exposure sheet  | 3     | Timing by drawing number, frame by frame             |
+| Onion skin      | 3     | Neighbouring-drawing display settings                |
+| Audio           | 3     | Sound tracks and waveforms                           |
+| Library         | 6     | Reusable drawings, parts, poses and templates        |
+| Hierarchy       | 6     | The parent–child structure of a rig                  |
+| Curve editor    | 6     | Keyframe timing and easing                           |
+| Node view       | 7     | How layers, effects and outputs connect              |
+| Properties      | 6, 7  | Values of the selected layer, node or keyframe       |
+| Scripts         | 8     | Run and manage scripts                               |
+| Review          | 9     | Comments and drawn notes                             |
 
 ## Look
 

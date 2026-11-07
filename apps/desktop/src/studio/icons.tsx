@@ -75,6 +75,18 @@ export const ToBackIcon = () => (
     <rect x="8" y="8" width="9" height="9" rx="1" strokeDasharray="1.5 2" />
   </Icon>
 );
+export const UndoIcon = () => (
+  <Icon>
+    <path d="M7 5L3 9l4 4" />
+    <path d="M3 9h9a4.5 4.5 0 0 1 0 9h-2" />
+  </Icon>
+);
+export const RedoIcon = () => (
+  <Icon>
+    <path d="M13 5l4 4-4 4" />
+    <path d="M17 9H8a4.5 4.5 0 0 0 0 9h2" />
+  </Icon>
+);
 export const ShapeIcon = () => (
   <Icon>
     <rect x="3" y="8" width="8" height="8" rx="0.5" />

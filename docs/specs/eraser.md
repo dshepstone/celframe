@@ -4,7 +4,7 @@ The eraser removes parts of vector strokes, the way a real eraser removes ink, s
 
 ## Behaviour
 
-- The eraser is a circle that follows the pointer. Its **size** is its diameter in scene units, set in the tool options bar.
+- The eraser is a circle that follows the pointer. Its **size** is its diameter in scene units, set in the Tool properties panel.
 - Where a stroke's centreline passes under the circle, that part of the stroke is removed. A stroke cut in the middle becomes two strokes, each keeping the original's colour, width, pressure and part.
 - **Whole strokes** mode removes any stroke the eraser touches, instead of cutting it.
 - The eraser only affects the **current part** of the drawing, line art or colour art, on the current layer at the current frame. See [line art and colour art](line-and-colour-art.md).
@@ -21,9 +21,9 @@ Cuts land within a quarter of the eraser's radius of its edge. Each remaining pi
 
 ## Controls
 
-| Action            | Shortcut | Elsewhere          |
-| ----------------- | -------- | ------------------ |
-| Eraser tool       | `E`      | Tool rail          |
-| Size              | —        | Tool options bar   |
-| Whole strokes     | —        | Tool options bar   |
-| Pan while erasing | Space    | As with every tool |
+| Action            | Shortcut | Elsewhere             |
+| ----------------- | -------- | --------------------- |
+| Eraser tool       | `E`      | Tool rail             |
+| Size              | —        | Tool properties panel |
+| Whole strokes     | —        | Tool properties panel |
+| Pan while erasing | Space    | As with every tool    |
