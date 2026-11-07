@@ -7,6 +7,11 @@ import { initialTheme, useApp } from "./store";
 // Before the first render, so the wrong theme never flashes.
 useApp.getState().setTheme(initialTheme());
 
+// In development only, the store is reachable from the browser console for inspection.
+if (import.meta.env.DEV) {
+  Object.assign(window, { celframeStore: useApp });
+}
+
 const root = document.getElementById("root");
 if (!root) throw new Error("the page has no root element");
 createRoot(root).render(

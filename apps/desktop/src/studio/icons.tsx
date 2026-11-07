@@ -1,15 +1,15 @@
-// Original line icons, drawn on a 20 × 20 grid.
+// Original line icons, drawn on a 20 × 20 grid and shown at 16 px.
 import type { ReactNode } from "react";
 
 function Icon({ children }: { children: ReactNode }) {
   return (
     <svg
       viewBox="0 0 20 20"
-      width="18"
-      height="18"
+      width="16"
+      height="16"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.6"
+      strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
@@ -19,6 +19,35 @@ function Icon({ children }: { children: ReactNode }) {
   );
 }
 
+/** A small chevron pointing right, for collapsible headers. Turned with CSS. */
+export const ChevronIcon = () => (
+  <svg
+    viewBox="0 0 10 10"
+    width="10"
+    height="10"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M3.5 2l3 3-3 3" />
+  </svg>
+);
+export const SlidersIcon = () => (
+  <Icon>
+    <path d="M4 6h7M15 6h1M4 14h1M9 14h7" />
+    <circle cx="13" cy="6" r="2" />
+    <circle cx="7" cy="14" r="2" />
+  </Icon>
+);
+export const SearchIcon = () => (
+  <Icon>
+    <circle cx="8.5" cy="8.5" r="5" />
+    <path d="M12.5 12.5L17 17" />
+  </Icon>
+);
 export const PenIcon = () => (
   <Icon>
     <path d="M4 16l1-4 8-8 3 3-8 8-4 1z" />

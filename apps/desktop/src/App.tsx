@@ -5,7 +5,8 @@ import { CommandPalette } from "./CommandPalette";
 import { RecoveryDialog } from "./RecoveryDialog";
 import { useApp } from "./store";
 import { ColourPanel } from "./studio/ColourPanel";
-import { RedoIcon, UndoIcon } from "./studio/icons";
+import { RedoIcon, SearchIcon, UndoIcon } from "./studio/icons";
+import { SidePanelResizer } from "./studio/SidePanelResizer";
 import { LayersPanel } from "./studio/LayersPanel";
 import { ShelfBar } from "./studio/ShelfBar";
 import { ToolProperties } from "./studio/ToolProperties";
@@ -31,7 +32,7 @@ function isTextField(target: EventTarget | null): boolean {
 }
 
 const headerIcon =
-  "flex h-7 w-7 items-center justify-center rounded-md text-text-muted outline-none hover:bg-surface-sunken hover:text-text focus-visible:outline-2 focus-visible:outline-focus-ring disabled:opacity-40";
+  "flex h-6 w-6 items-center justify-center rounded text-text-muted outline-none hover:bg-surface-hover hover:text-text focus-visible:outline-2 focus-visible:outline-focus-ring disabled:opacity-35 disabled:hover:bg-transparent";
 
 export function App() {
   const {
@@ -39,6 +40,7 @@ export function App() {
     error,
     theme,
     sidePanelOpen,
+    sidePanelWidth,
     timelineOpen,
     load,
     undo,
@@ -205,8 +207,14 @@ export function App() {
 
   return (
     // No background here: the canvas area must stay see-through for the native canvas.
-    <div className="flex h-screen flex-col text-text">
-      <header className="flex h-10 items-center gap-1 border-b border-border bg-surface px-2">
+    <div className="flex h-screen flex-col bg-surface text-text">
+      <header className="flex h-8 shrink-0 items-center gap-0.5 border-b border-border bg-surface-raised px-1.5">
+        <span
+          aria-hidden="true"
+          className="mr-1.5 ml-0.5 flex h-[18px] w-[18px] items-center justify-center rounded-[4px] bg-accent text-[10px] font-bold text-text-on-accent"
+        >
+          C
+        </span>
         <nav aria-label="Menu" className="flex items-center">
           <Menu
             label="File"
@@ -326,21 +334,24 @@ export function App() {
             ]}
           />
         </nav>
-        <h1 className="ml-3 truncate text-sm font-semibold tracking-tight">
-          {doc?.project.name ?? "Celframe"}
-          {doc?.dirty ? (
-            <span className="text-text-muted"> (unsaved)</span>
-          ) : null}
+        <div className="mx-2 h-4 w-px bg-border" aria-hidden="true" />
+        <h1 className="truncate text-sm text-text-muted">
+          <span className="font-medium text-text">
+            {doc?.project.name ?? "Celframe"}
+          </span>
+          {doc?.dirty ? <span> (unsaved)</span> : null}
         </h1>
         <div className="flex-1" />
-        <SegmentedControl
-          label="Mode"
-          options={MODES}
-          value="draw"
-          onChange={() => undefined}
-        />
+        <div className="h-8">
+          <SegmentedControl
+            label="Mode"
+            options={MODES}
+            value="draw"
+            onChange={() => undefined}
+          />
+        </div>
         <div className="flex-1" />
-        <div role="group" aria-label="History" className="mr-2 flex gap-1">
+        <div role="group" aria-label="History" className="mr-2 flex gap-0.5">
           <button
             type="button"
             aria-label="Undo"
@@ -365,9 +376,11 @@ export function App() {
         <button
           type="button"
           onClick={() => setPaletteOpen(true)}
-          className="rounded-md border border-control-border px-2.5 py-1 text-sm text-text-muted outline-none hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-focus-ring"
+          className="flex h-6 w-56 items-center gap-1.5 rounded border border-border bg-surface-sunken px-2 text-sm text-text-muted outline-none hover:border-control-border focus-visible:outline-2 focus-visible:outline-focus-ring"
         >
-          Search commands <kbd className="ml-1 font-sans">Ctrl+K</kbd>
+          <SearchIcon />
+          <span className="flex-1 text-left">Search commands</span>
+          <kbd className="font-sans text-xs">Ctrl+K</kbd>
         </button>
       </header>
 
@@ -396,19 +409,21 @@ export function App() {
         {sidePanelOpen ? (
           <aside
             aria-label="Side panels"
-            className="flex w-64 flex-col border-l border-border bg-surface-raised"
+            style={{ width: sidePanelWidth }}
+            className="relative flex shrink-0 flex-col border-l border-border bg-surface"
           >
-            <ToolProperties />
-            <div className="min-h-0 flex-1 overflow-auto">
+            <SidePanelResizer />
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+              <ToolProperties />
+              <ColourPanel />
               <LayersPanel />
             </div>
-            <ColourPanel />
           </aside>
         ) : null}
       </div>
 
       {timelineOpen ? (
-        <div className="h-44 border-t border-border">
+        <div className="h-40 shrink-0 border-t border-border">
           <Timeline />
         </div>
       ) : null}
@@ -416,7 +431,7 @@ export function App() {
       {error ? (
         <div
           role="alert"
-          className="bg-surface-raised px-4 py-1.5 text-sm text-danger"
+          className="border-t border-border bg-surface-raised px-3 py-1 text-sm text-danger"
         >
           {error}
         </div>

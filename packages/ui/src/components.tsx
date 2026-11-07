@@ -4,7 +4,7 @@ import * as ToggleGroup from "@radix-ui/react-toggle-group";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
 const focusRing =
-  "outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring";
+  "outline-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring";
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: "primary" | "quiet";
@@ -19,11 +19,11 @@ export function Button({
   const look =
     variant === "primary"
       ? "bg-accent text-text-on-accent hover:bg-accent-hover border-transparent"
-      : "bg-surface-raised text-text hover:bg-surface-sunken border-control-border";
+      : "bg-surface-raised text-text hover:bg-surface-hover border-control-border";
   return (
     <button
       type={type}
-      className={`inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60 ${look} ${focusRing} ${className}`}
+      className={`inline-flex h-6 items-center gap-1.5 rounded border px-2.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50 ${look} ${focusRing} ${className}`}
       {...props}
     />
   );
@@ -60,7 +60,7 @@ export function SegmentedControl({
       onValueChange={(next) => {
         if (next) onChange(next);
       }}
-      className="inline-flex gap-1 rounded-lg bg-surface-sunken p-1"
+      className="inline-flex h-full items-stretch gap-3"
     >
       {options.map((option) => (
         <ToggleGroup.Item
@@ -68,7 +68,7 @@ export function SegmentedControl({
           value={option.value}
           disabled={option.disabled ?? false}
           title={option.hint}
-          className={`rounded-md px-3 py-1 text-sm font-medium text-text-muted data-[state=on]:bg-accent data-[state=on]:text-text-on-accent disabled:cursor-not-allowed disabled:opacity-60 ${focusRing}`}
+          className={`border-b-2 border-transparent px-0.5 text-sm font-medium text-text-muted hover:text-text data-[state=on]:border-accent data-[state=on]:text-text disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-text-muted ${focusRing}`}
         >
           {option.label}
         </ToggleGroup.Item>
@@ -99,7 +99,7 @@ export function SidePanel({
     >
       <Collapsible.Trigger
         aria-label={`${open ? "Collapse" : "Expand"} ${title} panel`}
-        className={`m-2 rounded-md border border-control-border px-2 py-1 text-sm text-text hover:bg-surface-sunken ${focusRing}`}
+        className={`m-2 rounded border border-control-border px-2 py-1 text-sm text-text hover:bg-surface-hover ${focusRing}`}
       >
         {open ? `${title} ›` : "‹"}
       </Collapsible.Trigger>
@@ -122,10 +122,10 @@ export function Modal({ title, open, onOpenChange, children }: ModalProps) {
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 bg-black/40" />
+        <Dialog.Overlay className="fixed inset-0 bg-black/50" />
         <Dialog.Content
           aria-describedby={undefined}
-          className="fixed top-[15%] left-1/2 w-[min(36rem,calc(100vw-2rem))] -translate-x-1/2 rounded-lg border border-border bg-surface-raised p-3 text-text shadow-xl"
+          className="fixed top-[15%] left-1/2 w-[min(34rem,calc(100vw-2rem))] -translate-x-1/2 rounded-lg border border-border bg-surface-raised p-2 text-text shadow-2xl"
         >
           <Dialog.Title className="sr-only">{title}</Dialog.Title>
           {children}

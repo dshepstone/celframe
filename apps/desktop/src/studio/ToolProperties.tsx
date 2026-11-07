@@ -1,4 +1,9 @@
-import { useEffect, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react";
 import type { Arrange, SelectionEdit } from "../backend";
 import { useApp } from "../store";
 import { rgbaToHex } from "./colour";
@@ -13,6 +18,7 @@ import {
   ToBackIcon,
   ToFrontIcon,
 } from "./icons";
+import { Panel } from "./Panel";
 import {
   ArtSwitch,
   Group,
@@ -23,7 +29,11 @@ import {
 } from "./toolControls";
 
 const iconButton =
-  "flex h-7 w-7 items-center justify-center rounded border border-control-border text-text outline-none hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-focus-ring disabled:cursor-not-allowed disabled:opacity-40 aria-pressed:bg-accent aria-pressed:text-text-on-accent";
+  "flex h-6 w-6 items-center justify-center rounded text-text-muted outline-none hover:bg-surface-hover hover:text-text focus-visible:outline-2 focus-visible:outline-focus-ring disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent aria-pressed:bg-accent-muted aria-pressed:text-text";
+const field =
+  "h-6 w-full min-w-0 rounded border border-control-border bg-surface-sunken px-1.5 text-right text-sm text-text tabular-nums outline-none focus:border-accent disabled:opacity-45";
+const smallButton =
+  "h-6 rounded border border-control-border bg-surface-raised px-2 text-sm text-text outline-none hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-focus-ring disabled:opacity-40 disabled:hover:bg-surface-raised";
 
 /** Rounds for display without showing float noise such as 0.30000000000000004. */
 function format(value: number): string {
@@ -32,7 +42,8 @@ function format(value: number): string {
 
 /**
  * A number field that applies its value on Enter or when it loses focus. Anything that isn't
- * a valid number puts the current value back.
+ * a valid number puts the current value back. Dragging the short label left or right changes
+ * the value: 1 per pixel, 10 with Shift, 0.1 with Alt, applied once when the drag ends.
  */
 function NumberField({
   label,
@@ -58,9 +69,39 @@ function NumberField({
     if (draft.trim() !== "" && valid(next) && draft !== shown) onCommit(next);
     else setDraft(shown);
   };
+  const scrub = (event: ReactPointerEvent<HTMLSpanElement>) => {
+    if (disabled || value === null) return;
+    event.preventDefault();
+    const label = event.currentTarget;
+    const startX = event.clientX;
+    let latest = value;
+    label.setPointerCapture?.(event.pointerId);
+    const move = (e: PointerEvent) => {
+      const step = e.shiftKey ? 10 : e.altKey ? 0.1 : 1;
+      latest = value + Math.round(e.clientX - startX) * step;
+      setDraft(format(latest));
+    };
+    const end = () => {
+      label.removeEventListener("pointermove", move);
+      label.removeEventListener("pointerup", end);
+      label.removeEventListener("pointercancel", end);
+      if (latest !== value && valid(latest)) onCommit(latest);
+      else setDraft(shown);
+    };
+    label.addEventListener("pointermove", move);
+    label.addEventListener("pointerup", end);
+    label.addEventListener("pointercancel", end);
+  };
   return (
-    <label className="flex items-center gap-1.5">
-      <span className="w-3 text-xs text-text-muted" aria-hidden="true">
+    <label className="flex items-center gap-1">
+      <span
+        aria-hidden="true"
+        title="Drag to change"
+        onPointerDown={scrub}
+        className={`w-3.5 shrink-0 text-center text-xs text-text-muted ${
+          disabled ? "" : "cursor-ew-resize hover:text-accent"
+        }`}
+      >
         {short}
       </span>
       <input
@@ -75,7 +116,7 @@ function NumberField({
           if (e.key === "Enter") commit();
           if (e.key === "Escape") setDraft(shown);
         }}
-        className="w-full min-w-0 rounded border border-control-border bg-surface px-1.5 py-0.5 text-sm text-text tabular-nums disabled:opacity-50"
+        className={field}
       />
     </label>
   );
@@ -188,7 +229,7 @@ function SelectProperties() {
     <>
       <div role="group" aria-label="Transform" className="mb-3">
         <h3 className={heading}>Transform</h3>
-        <div className="grid grid-cols-[1fr_1fr_auto] items-center gap-x-2 gap-y-1.5">
+        <div className="grid grid-cols-[1fr_1fr_auto] items-center gap-x-1.5 gap-y-1">
           <NumberField
             label="X"
             short="X"
@@ -231,7 +272,7 @@ function SelectProperties() {
             <LockIcon />
           </button>
         </div>
-        <div className="mt-1.5 flex items-center gap-2">
+        <div className="mt-1 flex items-center gap-1.5">
           <label className="flex min-w-0 flex-1 items-center gap-1.5">
             <span className="text-xs text-text-muted">Rotate</span>
             <input
@@ -244,7 +285,7 @@ function SelectProperties() {
               onKeyDown={(e) => {
                 if (e.key === "Enter") rotate();
               }}
-              className="w-full min-w-0 rounded border border-control-border bg-surface px-1.5 py-0.5 text-sm text-text tabular-nums disabled:opacity-50"
+              className={field}
             />
             <span className="text-xs text-text-muted">°</span>
           </label>
@@ -252,7 +293,7 @@ function SelectProperties() {
             type="button"
             disabled={none}
             onClick={rotate}
-            className="rounded border border-control-border px-2 py-0.5 text-sm text-text hover:bg-surface-sunken disabled:opacity-40"
+            className={smallButton}
           >
             Apply
           </button>
@@ -270,7 +311,7 @@ function SelectProperties() {
 
       <div role="group" aria-label="Flip and rotate" className="mb-3">
         <h3 className={heading}>Flip and rotate</h3>
-        <div className="flex gap-1.5">
+        <div className="flex gap-0.5">
           <IconButton
             label="Flip horizontally"
             shortcut="Shift+H"
@@ -306,7 +347,7 @@ function SelectProperties() {
 
       <div role="group" aria-label="Arrange">
         <h3 className={heading}>Arrange</h3>
-        <div className="flex gap-1.5">
+        <div className="flex gap-0.5">
           {ARRANGE.map(({ to, label, shortcut, icon }) => (
             <IconButton
               key={to}
@@ -439,8 +480,7 @@ function ShapeProperties() {
 
 function ViewProperties({ zoomTool }: { zoomTool: boolean }) {
   const { changeView, view } = useApp();
-  const button =
-    "flex-1 rounded border border-control-border px-2 py-1 text-sm text-text hover:bg-surface-sunken";
+  const button = `flex-1 ${smallButton}`;
   return (
     <>
       <Group label="View">
@@ -487,30 +527,25 @@ function ViewProperties({ zoomTool }: { zoomTool: boolean }) {
 export function ToolProperties() {
   const { tool } = useApp();
   return (
-    <section
-      aria-label="Tool properties"
-      className="border-b border-border px-3 py-2"
-    >
-      <h2 className="mb-2 flex items-baseline justify-between text-xs font-semibold tracking-wide text-text-muted uppercase">
-        <span>Tool properties</span>
-        <span className="normal-case">{TOOL_NAMES[tool]}</span>
-      </h2>
-      {tool === "select" ? (
-        <>
-          <Group label="Select from">
-            <ArtSwitch label="Select from" />
-          </Group>
-          <SelectProperties />
-        </>
-      ) : tool === "pen" ? (
-        <PenProperties />
-      ) : tool === "eraser" ? (
-        <EraserProperties />
-      ) : tool === "shape" ? (
-        <ShapeProperties />
-      ) : (
-        <ViewProperties zoomTool={tool === "zoom"} />
-      )}
-    </section>
+    <Panel id="tool" title="Tool properties" detail={TOOL_NAMES[tool]}>
+      <div className="px-2.5 pt-2 pb-2.5">
+        {tool === "select" ? (
+          <>
+            <Group label="Select from">
+              <ArtSwitch label="Select from" />
+            </Group>
+            <SelectProperties />
+          </>
+        ) : tool === "pen" ? (
+          <PenProperties />
+        ) : tool === "eraser" ? (
+          <EraserProperties />
+        ) : tool === "shape" ? (
+          <ShapeProperties />
+        ) : (
+          <ViewProperties zoomTool={tool === "zoom"} />
+        )}
+      </div>
+    </Panel>
   );
 }

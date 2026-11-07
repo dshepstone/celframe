@@ -1,7 +1,7 @@
 import { targetLayer, useApp } from "../store";
 
 const viewButton =
-  "rounded px-1.5 text-text hover:bg-surface-sunken outline-none focus-visible:outline-2 focus-visible:outline-focus-ring disabled:opacity-40";
+  "flex h-4 min-w-4 items-center justify-center rounded px-1 text-text hover:bg-surface-hover outline-none focus-visible:outline-2 focus-visible:outline-focus-ring disabled:opacity-40";
 
 /** One line of facts about the open document, and the view controls. */
 export function StatusBar() {
@@ -16,7 +16,7 @@ export function StatusBar() {
   return (
     <footer
       aria-label="Status"
-      className="flex h-6 items-center gap-4 border-t border-border bg-surface-raised px-3 text-xs text-text-muted"
+      className="flex h-[22px] shrink-0 items-center gap-3 border-t border-border bg-surface-raised px-2.5 text-xs text-text-muted tabular-nums [&>span:not(:last-child)]:pr-3 [&>span:not(:last-child)]:shadow-[1px_0_0_var(--color-border)]"
     >
       {scene ? (
         <>
