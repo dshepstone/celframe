@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { backend, type DocumentView } from "./backend";
 import { useApp } from "./store";
+import { documentView, layer, scene } from "./testing/fixtures";
 
 vi.mock("./backend", () => ({
   backend: {
@@ -13,22 +14,14 @@ vi.mock("./backend", () => ({
     getRecovery: vi.fn(() => Promise.resolve(null)),
     undo: vi.fn(),
     redo: vi.fn(),
+    executeCommand: vi.fn(),
+    addLayer: vi.fn(),
     onCloseRequested: vi.fn(() => Promise.resolve(() => undefined)),
   },
 }));
 
-const view = (overrides: Partial<DocumentView> = {}): DocumentView => ({
-  project: {
-    id: "p",
-    name: "Bouncing ball",
-    scenes: [{ id: "s", name: "Shot 1" }],
-  },
-  canUndo: false,
-  canRedo: false,
-  dirty: false,
-  path: null,
-  ...overrides,
-});
+const view = (overrides: Partial<DocumentView> = {}): DocumentView =>
+  documentView(overrides);
 
 beforeEach(() => {
   vi.mocked(backend.getDocument).mockResolvedValue(view());
@@ -68,7 +61,7 @@ describe("App shell", () => {
     vi.mocked(backend.getDocument).mockResolvedValue(view({ canUndo: true }));
     vi.mocked(backend.undo).mockResolvedValue(
       view({
-        project: { id: "p", name: "Earlier", scenes: [] },
+        project: { id: "p", name: "Earlier", scenes: [scene()] },
       }),
     );
     render(<App />);
@@ -91,20 +84,121 @@ describe("App shell", () => {
     expect(screen.getByText("Bouncing ball")).toBeTruthy();
   });
 
-  it("collapses the side panel", async () => {
+  it("hides the side panels from the View menu", async () => {
     render(<App />);
-    await screen.findByText("Shot 1");
+    await screen.findByRole("listbox", { name: "Layer list" });
+    await userEvent.click(screen.getByRole("button", { name: "View" }));
     await userEvent.click(
-      screen.getByRole("button", { name: "Collapse Scene panel" }),
+      await screen.findByRole("menuitem", { name: /Hide side panels/ }),
     );
-    expect(screen.queryByText("Shot 1")).toBeNull();
+    expect(screen.queryByRole("listbox", { name: "Layer list" })).toBeNull();
   });
 
-  it("switches and applies the theme", async () => {
+  it("switches and applies the theme from the View menu", async () => {
     render(<App />);
     await screen.findByText("Bouncing ball");
-    await userEvent.click(screen.getByRole("button", { name: "Dark theme" }));
+    await userEvent.click(screen.getByRole("button", { name: "View" }));
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: /Dark theme/ }),
+    );
     expect(document.documentElement.dataset.theme).toBe("dark");
-    expect(screen.getByRole("button", { name: "Light theme" })).toBeTruthy();
+  });
+
+  it("has a tool rail where only the pen works for now", async () => {
+    render(<App />);
+    await screen.findByText("Bouncing ball");
+    const pen = screen.getByRole("button", { name: "Pen" });
+    expect(pen.getAttribute("aria-pressed")).toBe("true");
+    const eraser = screen.getByRole("button", { name: /Eraser/ });
+    expect((eraser as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("toggles a layer's visibility through the core", async () => {
+    vi.mocked(backend.executeCommand).mockResolvedValue(view());
+    render(<App />);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Hide Layer 1" }),
+    );
+    expect(backend.executeCommand).toHaveBeenCalledWith({
+      type: "setLayerVisible",
+      scene: "s",
+      layer: "l1",
+      visible: false,
+    });
+  });
+
+  it("adds a layer and makes it the one to draw on", async () => {
+    const two = scene({
+      layers: [
+        layer("l1", { name: "Layer 1" }),
+        layer("l2", { name: "Layer 2" }),
+      ],
+    });
+    vi.mocked(backend.addLayer).mockResolvedValue(
+      view({ project: { id: "p", name: "Bouncing ball", scenes: [two] } }),
+    );
+    render(<App />);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Add layer" }),
+    );
+    await screen.findByText("Drawing on: Layer 2");
+    const selected = screen.getByRole("option", { selected: true });
+    expect(selected.textContent).toContain("Layer 2");
+  });
+
+  it("renames a layer with a double-click", async () => {
+    vi.mocked(backend.executeCommand).mockResolvedValue(view());
+    render(<App />);
+    const row = await screen.findByRole("option", { name: /Layer 1/ });
+    await userEvent.dblClick(row);
+    const input = screen.getByRole("textbox", { name: "Rename Layer 1" });
+    await userEvent.clear(input);
+    await userEvent.type(input, "Ink{Enter}");
+    expect(backend.executeCommand).toHaveBeenCalledWith({
+      type: "renameLayer",
+      scene: "s",
+      layer: "l1",
+      name: "Ink",
+    });
+  });
+
+  it("picks a pen colour from the swatches", async () => {
+    render(<App />);
+    await userEvent.click(
+      await screen.findByRole("radio", { name: "Line red" }),
+    );
+    expect(useApp.getState().brushColor).toEqual([200, 50, 42, 255]);
+    expect(
+      screen.getByRole("img", { name: "Current colour #c8322a" }),
+    ).toBeTruthy();
+  });
+
+  it("clamps the brush size", async () => {
+    render(<App />);
+    const size = await screen.findByRole("spinbutton", { name: "Brush size" });
+    await userEvent.clear(size);
+    await userEvent.type(size, "900");
+    expect(useApp.getState().brushWidth).toBe(200);
+  });
+
+  it("shows each exposure on the timeline", async () => {
+    const withExposure = scene({
+      layers: [
+        layer("l1", {
+          name: "Layer 1",
+          drawings: [{ id: "d1", strokes: [] }],
+          exposures: [{ startFrame: 0, length: 3, drawing: "d1" }],
+        }),
+      ],
+    });
+    vi.mocked(backend.getDocument).mockResolvedValue(
+      view({
+        project: { id: "p", name: "Bouncing ball", scenes: [withExposure] },
+      }),
+    );
+    render(<App />);
+    expect(
+      await screen.findByRole("cell", { name: "Drawing 1, frames 1 to 3" }),
+    ).toBeTruthy();
   });
 });

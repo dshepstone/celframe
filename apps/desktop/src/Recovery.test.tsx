@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { backend, type DocumentView } from "./backend";
 import { useApp } from "./store";
+import { scene } from "./testing/fixtures";
 
 vi.mock("./backend", () => ({
   backend: {
@@ -18,7 +19,7 @@ vi.mock("./backend", () => ({
 }));
 
 const view = (name: string, dirty = false): DocumentView => ({
-  project: { id: name, name, scenes: [] },
+  project: { id: name, name, scenes: [scene()] },
   canUndo: false,
   canRedo: false,
   dirty,

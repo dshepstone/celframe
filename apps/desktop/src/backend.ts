@@ -2,10 +2,52 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 // Mirrors the view sent by the Rust core. The core stays the source of truth.
+export interface Exposure {
+  startFrame: number;
+  length: number;
+  drawing: string;
+}
+
+export interface Layer {
+  id: string;
+  name: string;
+  visible: boolean;
+  locked: boolean;
+  drawings: { id: string; strokes: unknown[] }[];
+  /** Sorted by start frame, with no overlaps. */
+  exposures: Exposure[];
+}
+
+export interface Scene {
+  id: string;
+  name: string;
+  width: number;
+  height: number;
+  frameRate: number;
+  /** Bottom layer first. */
+  layers: Layer[];
+}
+
 export interface Project {
   id: string;
   name: string;
-  scenes: { id: string; name: string }[];
+  scenes: Scene[];
+}
+
+/** A document edit for the core, as tagged JSON. See celframe-core's Command. */
+export type Command =
+  | { type: "setLayerVisible"; scene: string; layer: string; visible: boolean }
+  | { type: "setLayerLocked"; scene: string; layer: string; locked: boolean }
+  | { type: "renameLayer"; scene: string; layer: string; name: string }
+  | { type: "removeLayer"; scene: string; layer: string }
+  | { type: "moveLayer"; scene: string; layer: string; index: number };
+
+/** What the next stroke looks like and where it goes. */
+export interface PenOptions {
+  width: number;
+  color: [number, number, number, number];
+  /** null draws on the topmost visible, unlocked layer. */
+  layer: string | null;
 }
 
 export interface DocumentView {
@@ -58,8 +100,14 @@ export const backend = {
   /** Resolves false when there is no native canvas to show through the page. */
   setCanvasLayout: (layout: CanvasLayout) =>
     invoke<boolean>("set_canvas_layout", { layout }),
-  penDown: async (sample: PointerSample): Promise<void> => {
-    await invoke("pen_down", { sample });
+  executeCommand: (command: Command) =>
+    invoke<DocumentView>("execute_command", { command }),
+  addLayer: () => invoke<DocumentView>("add_layer"),
+  penDown: async (
+    sample: PointerSample,
+    options: PenOptions,
+  ): Promise<void> => {
+    await invoke("pen_down", { sample, options });
   },
   penMove: async (samples: PointerSample[]): Promise<void> => {
     await invoke("pen_move", { samples });

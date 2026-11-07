@@ -40,7 +40,9 @@ export function usePenInput<T extends HTMLElement>(
       pointer = event.pointerId;
       element.setPointerCapture?.(event.pointerId);
       event.preventDefault();
-      backend.penDown(toSample(event)).catch(reportError);
+      backend
+        .penDown(toSample(event), useApp.getState().penOptions())
+        .catch(reportError);
     };
     const move = (event: PointerEvent) => {
       if (event.pointerId !== pointer) return;

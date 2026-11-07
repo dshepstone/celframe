@@ -1,3 +1,4 @@
 target/
 pnpm-lock.yaml
 LICENSE
+apps/desktop/src-tauri/gen/

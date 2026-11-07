@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use celframe_core::{Command, CommandError, Drawing, Exposure, History, Project, StrokeSample};
 
-use crate::pen::{self, PenStroke};
+use crate::pen::{self, PenOptions, PenStroke};
 use serde::Serialize;
 
 pub struct Session {
@@ -98,6 +98,18 @@ impl Session {
 
     pub fn is_dirty(&self) -> bool {
         self.history.is_dirty()
+    }
+
+    /// Adds an empty layer on top of the first scene, with an ID the core chooses.
+    pub fn add_layer(&mut self) -> Result<DocumentView, CommandError> {
+        let scene = self.project.scenes.first().ok_or(CommandError::NotFound)?;
+        let name = format!("Layer {}", scene.layers.len() + 1);
+        let command = Command::AddLayer {
+            scene: scene.id,
+            layer: celframe_core::Layer::new(name),
+            index: scene.layers.len(),
+        };
+        self.execute(command)
     }
 
     pub fn execute(&mut self, command: Command) -> Result<DocumentView, CommandError> {
@@ -207,13 +219,20 @@ impl Session {
 
 impl Session {
     /// Starts a stroke at a scene-space sample. `min_distance` is in scene units.
-    pub fn pen_down(&mut self, sample: StrokeSample, min_distance: f64) -> Result<(), String> {
+    pub fn pen_down(
+        &mut self,
+        sample: StrokeSample,
+        min_distance: f64,
+        options: PenOptions,
+    ) -> Result<(), String> {
         if self.pen.is_some() {
             self.pen_up()?;
         }
+        if !pen::PEN_WIDTH_RANGE.contains(&options.width) {
+            return Err("That brush size isn't valid.".to_owned());
+        }
         let first = pen::clean(sample).ok_or("That pen position isn't valid.")?;
-        let (scene, layer, drawing) =
-            pen::find_target(&self.project, 0).ok_or("Show or unlock a layer to draw on it.")?;
+        let (scene, layer, drawing) = pen::find_target(&self.project, 0, options.layer)?;
         let drawing = match drawing {
             Some(drawing) => drawing,
             None => self.add_drawing_at_frame_0(scene, layer)?,
@@ -226,7 +245,7 @@ impl Session {
             .and_then(|s| s.layers.iter().find(|l| l.id == layer))
             .and_then(|l| l.drawings.iter().find(|d| d.id == drawing))
             .map_or(0, |d| d.strokes.len());
-        let (pen, stroke) = PenStroke::start((scene, layer, drawing), first, min_distance);
+        let (pen, stroke) = PenStroke::start((scene, layer, drawing), first, min_distance, options);
         let command = Command::AddStroke {
             scene,
             layer,
@@ -570,7 +589,7 @@ mod tests {
 
     fn draw(session: &mut Session, points: &[(f64, f64)]) {
         session
-            .pen_down(sample(points[0].0, points[0].1), 0.1)
+            .pen_down(sample(points[0].0, points[0].1), 0.1, PenOptions::default())
             .unwrap();
         let rest: Vec<_> = points[1..].iter().map(|&(x, y)| sample(x, y)).collect();
         session.pen_move(&rest).unwrap();
@@ -633,6 +652,57 @@ mod tests {
     }
 
     #[test]
+    fn the_chosen_brush_size_colour_and_layer_are_used() {
+        let mut project = Project::starter("A");
+        project.scenes[0]
+            .layers
+            .push(celframe_core::Layer::new("Top"));
+        let bottom = project.scenes[0].layers[0].id;
+        let mut session = Session::new(project);
+        let options = PenOptions {
+            width: 3.5,
+            color: [200, 10, 20, 255],
+            layer: Some(bottom),
+        };
+        session.pen_down(sample(0.0, 0.0), 0.1, options).unwrap();
+        session.pen_up().unwrap();
+        let stroke = &strokes_at_frame_0(&session)[0];
+        assert_eq!(stroke.base_width, 3.5);
+        assert_eq!(stroke.color, [200, 10, 20, 255]);
+        assert!(session.project().scenes[0].layers[1].drawings.is_empty());
+    }
+
+    #[test]
+    fn a_hidden_chosen_layer_or_a_bad_size_is_refused() {
+        let mut project = Project::starter("A");
+        project.scenes[0].layers[0].visible = false;
+        let layer = project.scenes[0].layers[0].id;
+        let mut session = Session::new(project);
+        let hidden = PenOptions {
+            layer: Some(layer),
+            ..PenOptions::default()
+        };
+        assert!(session.pen_down(sample(0.0, 0.0), 0.1, hidden).is_err());
+        let huge = PenOptions {
+            width: 1e9,
+            ..PenOptions::default()
+        };
+        assert!(session.pen_down(sample(0.0, 0.0), 0.1, huge).is_err());
+        assert!(!session.view().can_undo);
+    }
+
+    #[test]
+    fn add_layer_puts_a_numbered_layer_on_top_and_undoes() {
+        let mut session = Session::new(Project::new("A"));
+        let view = session.add_layer().unwrap();
+        let layers = &view.project.scenes[0].layers;
+        assert_eq!(layers.len(), 2);
+        assert_eq!(layers[1].name, "Layer 2");
+        assert_eq!(layers[1].id.as_uuid().get_version_num(), 7);
+        assert_eq!(session.undo().unwrap().project.scenes[0].layers.len(), 1);
+    }
+
+    #[test]
     fn a_layer_with_no_drawing_gets_one_first() {
         let mut session = Session::new(Project::new("A"));
         draw(&mut session, &[(0.0, 0.0), (10.0, 0.0)]);
@@ -644,7 +714,9 @@ mod tests {
         let mut project = Project::starter("A");
         project.scenes[0].layers[0].visible = false;
         let mut session = Session::new(project);
-        let error = session.pen_down(sample(0.0, 0.0), 0.1).unwrap_err();
+        let error = session
+            .pen_down(sample(0.0, 0.0), 0.1, PenOptions::default())
+            .unwrap_err();
         assert!(error.contains("unlock a layer"), "{error}");
         assert!(!session.view().dirty);
     }
@@ -652,7 +724,11 @@ mod tests {
     #[test]
     fn invalid_positions_and_stray_moves_are_ignored_safely() {
         let mut session = Session::new(Project::starter("A"));
-        assert!(session.pen_down(sample(f64::NAN, 0.0), 0.1).is_err());
+        assert!(
+            session
+                .pen_down(sample(f64::NAN, 0.0), 0.1, PenOptions::default())
+                .is_err()
+        );
         session.pen_move(&[sample(1.0, 1.0)]).unwrap();
         session.pen_up().unwrap();
         assert!(strokes_at_frame_0(&session).is_empty());
@@ -661,7 +737,9 @@ mod tests {
     #[test]
     fn undo_mid_stroke_ends_the_stroke() {
         let mut session = Session::new(Project::starter("A"));
-        session.pen_down(sample(0.0, 0.0), 0.1).unwrap();
+        session
+            .pen_down(sample(0.0, 0.0), 0.1, PenOptions::default())
+            .unwrap();
         session
             .pen_move(&[sample(5.0, 0.0), sample(10.0, 0.0), sample(15.0, 0.0)])
             .unwrap();

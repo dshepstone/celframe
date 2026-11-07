@@ -1,6 +1,13 @@
 import { applyTheme, type ThemeName } from "@celframe/ui";
 import { create } from "zustand";
-import { backend, type DocumentView, type RecoveryInfo } from "./backend";
+import {
+  backend,
+  type Command,
+  type DocumentView,
+  type Layer,
+  type PenOptions,
+  type RecoveryInfo,
+} from "./backend";
 
 const THEME_KEY = "celframe.theme";
 
@@ -33,6 +40,18 @@ export type FileAction = "new" | "open" | "close";
 
 export type UnsavedChoice = "save" | "discard" | "cancel";
 
+export type Rgba = [number, number, number, number];
+
+/** The layer new strokes go to: the chosen one, or else the topmost visible, unlocked one. */
+export function targetLayer(
+  layers: readonly Layer[],
+  chosen: string | null,
+): Layer | null {
+  const picked = chosen ? layers.find((l) => l.id === chosen) : undefined;
+  if (picked) return picked;
+  return [...layers].reverse().find((l) => l.visible && !l.locked) ?? null;
+}
+
 export interface AppState {
   document: DocumentView | null;
   error: string | null;
@@ -42,7 +61,12 @@ export interface AppState {
   recovery: RecoveryInfo | null;
   theme: ThemeName;
   sidePanelOpen: boolean;
+  timelineOpen: boolean;
   paletteOpen: boolean;
+  brushWidth: number;
+  brushColor: Rgba;
+  /** The layer chosen in the Layers panel, if any. */
+  activeLayer: string | null;
   load: () => Promise<void>;
   undo: () => Promise<void>;
   redo: () => Promise<void>;
@@ -58,8 +82,18 @@ export interface AppState {
   setTheme: (theme: ThemeName) => void;
   toggleTheme: () => void;
   setSidePanelOpen: (open: boolean) => void;
+  setTimelineOpen: (open: boolean) => void;
   setPaletteOpen: (open: boolean) => void;
+  setBrushWidth: (width: number) => void;
+  setBrushColor: (color: Rgba) => void;
+  setActiveLayer: (layer: string | null) => void;
+  runCommand: (command: Command) => Promise<void>;
+  addLayer: () => Promise<void>;
+  penOptions: () => PenOptions;
 }
+
+export const BRUSH_WIDTH_MIN = 0.5;
+export const BRUSH_WIDTH_MAX = 200;
 
 export const useApp = create<AppState>((set, get) => {
   // The core owns the document, so the UI only ever stores what it sends back.
@@ -96,7 +130,11 @@ export const useApp = create<AppState>((set, get) => {
     recovery: null,
     theme: "light",
     sidePanelOpen: true,
+    timelineOpen: true,
     paletteOpen: false,
+    brushWidth: 10,
+    brushColor: [0, 0, 0, 255],
+    activeLayer: null,
     load: async () => {
       await sync(backend.getDocument());
       try {
@@ -147,6 +185,32 @@ export const useApp = create<AppState>((set, get) => {
       get().setTheme(get().theme === "dark" ? "light" : "dark");
     },
     setSidePanelOpen: (sidePanelOpen) => set({ sidePanelOpen }),
+    setTimelineOpen: (timelineOpen) => set({ timelineOpen }),
     setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
+    setBrushWidth: (width) =>
+      set({
+        brushWidth: Math.min(BRUSH_WIDTH_MAX, Math.max(BRUSH_WIDTH_MIN, width)),
+      }),
+    setBrushColor: (brushColor) => set({ brushColor }),
+    setActiveLayer: (activeLayer) => set({ activeLayer }),
+    runCommand: async (command) => {
+      await sync(backend.executeCommand(command));
+      // A removed layer can't stay chosen.
+      const layers = get().document?.project.scenes[0]?.layers ?? [];
+      const active = get().activeLayer;
+      if (active && !layers.some((l) => l.id === active)) {
+        set({ activeLayer: null });
+      }
+    },
+    addLayer: async () => {
+      if (await sync(backend.addLayer())) {
+        const layers = get().document?.project.scenes[0]?.layers ?? [];
+        set({ activeLayer: layers[layers.length - 1]?.id ?? null });
+      }
+    },
+    penOptions: () => {
+      const { brushWidth, brushColor, activeLayer } = get();
+      return { width: brushWidth, color: brushColor, layer: activeLayer };
+    },
   };
 });
