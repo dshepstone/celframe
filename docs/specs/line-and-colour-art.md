@@ -16,7 +16,7 @@ Animators usually ink lines first and paint colour underneath them. Keeping the 
 
 ## Tools
 
-- Drawing tools draw on the **current part**, chosen in the tool options bar. The default is line art.
+- Drawing tools draw on the **current part**, chosen in the Tool properties panel. The default is line art.
 - `L` switches the current part. The status bar shows which part is current.
 - The current part is a tool setting, not part of the document, so switching it isn't undoable.
 - Later tools follow these rules:

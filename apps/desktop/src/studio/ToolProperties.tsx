@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { Arrange, SelectionEdit } from "../backend";
 import { useApp } from "../store";
+import { rgbaToHex } from "./colour";
 import {
   BackwardIcon,
   FlipHorizontalIcon,
@@ -12,9 +13,15 @@ import {
   ToBackIcon,
   ToFrontIcon,
 } from "./icons";
+import {
+  ArtSwitch,
+  Group,
+  Hint,
+  ShapePicker,
+  SizeControl,
+  heading,
+} from "./toolControls";
 
-const heading =
-  "mb-1.5 text-[11px] font-semibold tracking-wide text-text-muted uppercase";
 const iconButton =
   "flex h-7 w-7 items-center justify-center rounded border border-control-border text-text outline-none hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-focus-ring disabled:cursor-not-allowed disabled:opacity-40 aria-pressed:bg-accent aria-pressed:text-text-on-accent";
 
@@ -326,6 +333,156 @@ const TOOL_NAMES: Record<string, string> = {
   zoom: "Zoom",
 };
 
+/** The pen colour, chosen in the Colour panel. */
+function ColourPreview() {
+  const { brushColor } = useApp();
+  const hex = rgbaToHex(brushColor);
+  return (
+    <div className="flex items-center gap-2 text-sm">
+      <span
+        className="h-6 w-10 rounded border border-control-border"
+        style={{ background: hex }}
+        aria-label={`Current colour ${hex}`}
+        role="img"
+      />
+      <span className="font-mono text-xs text-text-muted">{hex}</span>
+    </div>
+  );
+}
+
+function PenProperties() {
+  const { brushWidth, setBrushWidth } = useApp();
+  return (
+    <>
+      <Group label="Brush">
+        <SizeControl
+          label="Brush size"
+          value={brushWidth}
+          onChange={setBrushWidth}
+        />
+      </Group>
+      <Group label="Colour">
+        <ColourPreview />
+      </Group>
+      <Group label="Draw on">
+        <ArtSwitch label="Draw on" />
+      </Group>
+      <Hint>
+        Pressure changes the width. Size is the width at full pressure.
+      </Hint>
+    </>
+  );
+}
+
+function EraserProperties() {
+  const {
+    eraserWidth,
+    setEraserWidth,
+    eraseWholeStrokes,
+    setEraseWholeStrokes,
+  } = useApp();
+  return (
+    <>
+      <Group label="Eraser">
+        <SizeControl
+          label="Eraser size"
+          value={eraserWidth}
+          onChange={setEraserWidth}
+        />
+        <label className="mt-2 flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={eraseWholeStrokes}
+            onChange={(e) => setEraseWholeStrokes(e.target.checked)}
+            className="accent-[var(--color-accent)]"
+          />
+          <span>Whole strokes</span>
+        </label>
+      </Group>
+      <Group label="Erase from">
+        <ArtSwitch label="Erase from" />
+      </Group>
+      <Hint>
+        Cuts strokes where you drag. Whole strokes removes any stroke it
+        touches.
+      </Hint>
+    </>
+  );
+}
+
+function ShapeProperties() {
+  const { brushWidth, setBrushWidth } = useApp();
+  return (
+    <>
+      <Group label="Shape">
+        <ShapePicker />
+      </Group>
+      <Group label="Line">
+        <SizeControl
+          label="Brush size"
+          value={brushWidth}
+          onChange={setBrushWidth}
+        />
+        <div className="mt-2">
+          <ColourPreview />
+        </div>
+      </Group>
+      <Group label="Draw on">
+        <ArtSwitch label="Draw on" />
+      </Group>
+      <Hint>
+        Shift keeps proportions or snaps angles. Alt draws from the centre.
+      </Hint>
+    </>
+  );
+}
+
+function ViewProperties({ zoomTool }: { zoomTool: boolean }) {
+  const { changeView, view } = useApp();
+  const button =
+    "flex-1 rounded border border-control-border px-2 py-1 text-sm text-text hover:bg-surface-sunken";
+  return (
+    <>
+      <Group label="View">
+        <div className="flex gap-1.5">
+          <button
+            type="button"
+            className={button}
+            onClick={() => void changeView({ type: "zoom", factor: 0.8 })}
+          >
+            Zoom out
+          </button>
+          <button
+            type="button"
+            className={button}
+            onClick={() => void changeView({ type: "zoom", factor: 1.25 })}
+          >
+            Zoom in
+          </button>
+          <button
+            type="button"
+            className={button}
+            onClick={() => void changeView({ type: "fit" })}
+          >
+            Fit
+          </button>
+        </div>
+        {view ? (
+          <p className="mt-2 text-xs text-text-muted tabular-nums">
+            {Math.round(view.zoomPercent)}% · {Math.round(view.rotationDegrees)}
+            °
+          </p>
+        ) : null}
+      </Group>
+      <Hint>
+        {zoomTool
+          ? "Click to zoom in at the pointer. Alt-click zooms out."
+          : "Drag to pan. Hold Space with any tool to pan too."}
+      </Hint>
+    </>
+  );
+}
+
 /** The current tool's full settings, at the top of the side panel. */
 export function ToolProperties() {
   const { tool } = useApp();
@@ -339,11 +496,20 @@ export function ToolProperties() {
         <span className="normal-case">{TOOL_NAMES[tool]}</span>
       </h2>
       {tool === "select" ? (
-        <SelectProperties />
+        <>
+          <Group label="Select from">
+            <ArtSwitch label="Select from" />
+          </Group>
+          <SelectProperties />
+        </>
+      ) : tool === "pen" ? (
+        <PenProperties />
+      ) : tool === "eraser" ? (
+        <EraserProperties />
+      ) : tool === "shape" ? (
+        <ShapeProperties />
       ) : (
-        <p className="text-sm text-text-muted">
-          This tool's settings are in the bar above the canvas.
-        </p>
+        <ViewProperties zoomTool={tool === "zoom"} />
       )}
     </section>
   );

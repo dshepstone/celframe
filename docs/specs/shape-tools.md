@@ -11,7 +11,7 @@ The Shape tool draws clean geometric strokes: lines, rectangles, ellipses and re
 | Ellipse   | An ellipse that fits the rectangle from A to B                             |
 | Polygon   | A regular polygon that fits the rectangle from A to B, a corner at the top |
 
-- Polygons have 3 to 12 sides, set in the tool options bar. The default is 5.
+- Polygons have 3 to 12 sides, set in the Tool properties panel. The default is 5.
 - Ellipses are made of straight segments about 4 scene units long, with at least 32 and at most 256.
 - Shapes use the pen's size and colour, at full pressure, so their width is even.
 - Closed shapes end where they start.
@@ -34,8 +34,8 @@ Hold these while dragging. They take effect on the next pointer movement.
 
 ## Controls
 
-| Action     | Shortcut | Elsewhere                                           |
-| ---------- | -------- | --------------------------------------------------- |
-| Shape tool | `U`      | Tool rail                                           |
-| Shape      | —        | Tool options bar: Line, Rectangle, Ellipse, Polygon |
-| Sides      | —        | Tool options bar, for polygons                      |
+| Action     | Shortcut | Elsewhere                                                |
+| ---------- | -------- | -------------------------------------------------------- |
+| Shape tool | `U`      | Tool rail                                                |
+| Shape      | —        | Tool properties panel: Line, Rectangle, Ellipse, Polygon |
+| Sides      | —        | Tool properties panel, for polygons                      |
