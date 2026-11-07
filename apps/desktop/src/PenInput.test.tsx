@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -10,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { backend, type DocumentView } from "./backend";
 import { useApp } from "./store";
+import { scene } from "./testing/fixtures";
 
 vi.mock("./backend", () => ({
   backend: {
@@ -24,7 +26,7 @@ vi.mock("./backend", () => ({
 }));
 
 const view = (dirty: boolean): DocumentView => ({
-  project: { id: "p", name: "Ball", scenes: [] },
+  project: { id: "p", name: "Ball", scenes: [scene()] },
   canUndo: dirty,
   canRedo: false,
   dirty,
@@ -68,7 +70,10 @@ describe("pen input", () => {
   it("sends a stroke to the core, batching moves, and shows the result", async () => {
     await renderWithCanvas();
     pointer("pointerDown", { clientX: 10, clientY: 20 });
-    expect(backend.penDown).toHaveBeenCalledWith({ x: 10, y: 20, pressure: 1 });
+    expect(backend.penDown).toHaveBeenCalledWith(
+      { x: 10, y: 20, pressure: 1 },
+      { width: 10, color: [0, 0, 0, 255], layer: null },
+    );
 
     pointer("pointerMove", { clientX: 11, clientY: 21 });
     pointer("pointerMove", { clientX: 12, clientY: 22 });
@@ -105,10 +110,24 @@ describe("pen input", () => {
       clientX: 1,
       clientY: 2,
     });
-    expect(backend.penDown).toHaveBeenCalledWith({
-      x: 1,
-      y: 2,
-      pressure: 0.35,
+    expect(backend.penDown).toHaveBeenCalledWith(
+      { x: 1, y: 2, pressure: 0.35 },
+      expect.anything(),
+    );
+  });
+
+  it("draws with the chosen size, colour and layer", async () => {
+    await renderWithCanvas();
+    act(() => {
+      useApp.getState().setBrushWidth(4);
+      useApp.getState().setBrushColor([200, 10, 20, 255]);
+      useApp.getState().setActiveLayer("l1");
+    });
+    pointer("pointerDown", { clientX: 1, clientY: 2 });
+    expect(backend.penDown).toHaveBeenCalledWith(expect.anything(), {
+      width: 4,
+      color: [200, 10, 20, 255],
+      layer: "l1",
     });
   });
 

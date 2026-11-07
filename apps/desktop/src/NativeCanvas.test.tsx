@@ -1,17 +1,17 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { backend } from "./backend";
 import { useApp } from "./store";
+import { scene } from "./testing/fixtures";
 import { hexToRgba } from "./useNativeCanvas";
 
 vi.mock("./backend", () => ({
   backend: {
     getDocument: vi.fn(() =>
       Promise.resolve({
-        project: { id: "p", name: "Ball", scenes: [] },
+        project: { id: "p", name: "Ball", scenes: [scene()] },
         canUndo: false,
         canRedo: false,
         dirty: false,
@@ -72,7 +72,7 @@ describe("native canvas", () => {
     vi.mocked(backend.setCanvasLayout).mockResolvedValue(true);
     render(<App />);
     await screen.findByText("Ball");
-    await userEvent.click(screen.getByRole("button", { name: "Dark theme" }));
+    act(() => useApp.getState().setTheme("dark"));
     await waitFor(() =>
       expect(backend.setCanvasLayout).toHaveBeenLastCalledWith(
         expect.objectContaining({ backdrop: [15, 16, 18, 255] }),

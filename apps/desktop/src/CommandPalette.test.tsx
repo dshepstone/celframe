@@ -6,6 +6,7 @@ import { App } from "./App";
 import { backend, type DocumentView } from "./backend";
 import { matches } from "./CommandPalette";
 import { useApp } from "./store";
+import { scene } from "./testing/fixtures";
 
 vi.mock("./backend", () => ({
   backend: {
@@ -19,7 +20,7 @@ vi.mock("./backend", () => ({
 }));
 
 const view = (canUndo: boolean): DocumentView => ({
-  project: { id: "p", name: "Ball", scenes: [] },
+  project: { id: "p", name: "Ball", scenes: [scene()] },
   canUndo,
   canRedo: false,
   dirty: false,

@@ -12,6 +12,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use canvas::{CanvasLayout, Mapping, WindowCanvas};
 use celframe_core::{Command, Project, StrokeSample};
+use pen::PenOptions;
 use recovery::{RecoveryInfo, RecoveryStore};
 use serde::Deserialize;
 use session::{AutosaveStep, DocumentView, Session};
@@ -90,6 +91,12 @@ fn execute_command(
 }
 
 #[tauri::command]
+fn add_layer(app: AppHandle, state: State<'_, SharedSession>) -> Result<DocumentView, String> {
+    let result = lock(&state)?.add_layer().map_err(|e| e.to_string());
+    redrawn(&app, result)
+}
+
+#[tauri::command]
 fn undo(app: AppHandle, state: State<'_, SharedSession>) -> Result<DocumentView, String> {
     let result = lock(&state)?.undo().map_err(|e| e.to_string());
     redrawn(&app, result)
@@ -148,11 +155,16 @@ fn pen_down(
     state: State<'_, SharedSession>,
     canvas: State<'_, CanvasState>,
     sample: PointerSample,
+    options: Option<PenOptions>,
 ) -> Result<(), String> {
     {
         let mut session = lock(&state)?;
         let mapping = mapping(&session, &canvas)?;
-        session.pen_down(to_scene(&mapping, sample), mapping.min_distance())?;
+        session.pen_down(
+            to_scene(&mapping, sample),
+            mapping.min_distance(),
+            options.unwrap_or_default(),
+        )?;
     }
     redraw(&app);
     Ok(())
@@ -409,6 +421,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_document,
             execute_command,
+            add_layer,
             undo,
             redo,
             new_document,
