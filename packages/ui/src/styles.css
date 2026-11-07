@@ -11,14 +11,77 @@
   --color-surface: Canvas;
   --color-surface-raised: Canvas;
   --color-surface-sunken: Canvas;
+  --color-surface-hover: Canvas;
   --color-canvas-backdrop: Canvas;
   --color-text: CanvasText;
   --color-text-muted: CanvasText;
   --color-text-on-accent: Canvas;
   --color-accent: Highlight;
   --color-accent-hover: Highlight;
+  --color-accent-muted: Canvas;
   --color-border: CanvasText;
   --color-control-border: CanvasText;
   --color-focus-ring: Highlight;
   --color-danger: CanvasText;
+
+  /* A compact type scale for a dense tool interface. See docs/specs/visual-design.md. */
+  --font-sans:
+    "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system,
+    "SF Pro Text", "Helvetica Neue", "Noto Sans", sans-serif;
+  --text-2xs: 11px;
+  --text-2xs--line-height: 14px;
+  --text-xs: 11px;
+  --text-xs--line-height: 16px;
+  --text-sm: 12px;
+  --text-sm--line-height: 16px;
+  --text-base: 13px;
+  --text-base--line-height: 18px;
+  --radius-sm: 2px;
+  --radius: 3px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+  --radius-xl: 6px;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    font-family: var(--font-sans);
+    font-size: 12px;
+    line-height: 16px;
+    -webkit-font-smoothing: antialiased;
+    background: var(--color-surface);
+    color: var(--color-text);
+    /* Interface text isn't for selecting; fields still are. */
+    user-select: none;
+    cursor: default;
+  }
+  input,
+  textarea {
+    user-select: text;
+  }
+  input,
+  button,
+  select {
+    font: inherit;
+  }
+  /* Numbers line up in columns. */
+  input,
+  td,
+  output,
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+  /* Thin scrollbars that recede into the panels. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-control-border) transparent;
+  }
+  ::selection {
+    background: var(--color-accent-muted);
+  }
 }

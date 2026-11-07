@@ -2,13 +2,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { matches } from "../CommandPalette";
 import { useActions, type Action } from "../actions";
 import { useApp } from "../store";
+import { SlidersIcon } from "./icons";
 
 const control =
-  "rounded px-2 py-1 text-sm outline-none focus-visible:outline-2 focus-visible:outline-focus-ring";
+  "h-6 rounded px-2 text-sm outline-none focus-visible:outline-2 focus-visible:outline-focus-ring";
 const shelfButton =
-  "flex h-7 min-w-7 items-center justify-center rounded-md px-1.5 text-sm text-text outline-none hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-focus-ring disabled:opacity-40";
+  "flex h-7 min-w-7 items-center justify-center rounded px-1.5 text-sm text-text outline-none hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-focus-ring disabled:opacity-35 disabled:hover:bg-transparent";
 const editButton =
-  "flex h-5 w-5 items-center justify-center rounded text-xs text-text-muted hover:bg-surface-sunken hover:text-text disabled:opacity-30";
+  "flex h-3.5 w-4 items-center justify-center rounded text-[10px] leading-none text-text-muted hover:bg-surface-hover hover:text-text disabled:opacity-30";
 
 /** A shelf's tab, renamed in place with a double-click or F2. */
 function ShelfTab({
@@ -40,7 +41,7 @@ function ShelfTab({
           if (e.key === "Enter") finish(true);
           if (e.key === "Escape") finish(false);
         }}
-        className="w-24 rounded border border-control-border bg-surface px-1.5 py-0.5 text-sm text-text"
+        className="my-auto h-6 w-24 rounded border border-control-border bg-surface-sunken px-1.5 text-sm text-text"
       />
     );
   }
@@ -60,10 +61,10 @@ function ShelfTab({
           setEditing(true);
         }
       }}
-      className={`${control} ${
+      className={`border-b-2 px-1.5 text-sm outline-none focus-visible:outline-2 focus-visible:outline-focus-ring ${
         active
-          ? "bg-surface-sunken font-medium text-text"
-          : "text-text-muted hover:text-text"
+          ? "border-accent text-text"
+          : "border-transparent text-text-muted hover:text-text"
       }`}
     >
       {name}
@@ -105,12 +106,12 @@ function AddAction({
           setQuery("");
           setOpen(!open);
         }}
-        className={`${control} border border-control-border text-text hover:bg-surface-sunken`}
+        className={`${control} border border-control-border bg-surface-raised text-text hover:bg-surface-hover`}
       >
         Add action
       </button>
       {open ? (
-        <div className="absolute top-full right-0 z-20 mt-1 w-72 rounded-md border border-border bg-surface-raised p-2 shadow-lg">
+        <div className="absolute top-full right-0 z-20 mt-1 w-72 rounded-lg border border-border bg-surface-raised p-1.5 shadow-2xl">
           <input
             autoFocus
             aria-label="Find an action"
@@ -124,7 +125,7 @@ function AddAction({
                 setOpen(false);
               }
             }}
-            className="w-full rounded border border-control-border bg-surface px-2 py-1 text-sm text-text"
+            className="h-6 w-full rounded border border-control-border bg-surface-sunken px-2 text-sm text-text"
           />
           <ul
             role="listbox"
@@ -140,7 +141,7 @@ function AddAction({
                   onPick(action.id);
                   setOpen(false);
                 }}
-                className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm text-text hover:bg-surface-sunken"
+                className="flex h-6 cursor-default items-center gap-2 rounded px-2 text-sm text-text hover:bg-accent-muted"
               >
                 <span className="w-16 shrink-0 text-xs text-text-muted">
                   {action.group}
@@ -191,12 +192,12 @@ export function ShelfBar() {
     <div
       role="toolbar"
       aria-label="Shelves"
-      className="flex h-10 items-center gap-3 border-b border-border bg-surface-raised px-2"
+      className="flex h-[34px] shrink-0 items-center gap-2 border-b border-border bg-surface px-2"
     >
       <div
         role="tablist"
         aria-label="Shelf"
-        className="flex items-center gap-0.5"
+        className="flex h-full items-stretch gap-1"
       >
         {shelves.map((s) => (
           <ShelfTab
@@ -211,7 +212,7 @@ export function ShelfBar() {
           aria-label="New shelf"
           title="New shelf"
           onClick={addShelf}
-          className={`${control} text-text-muted hover:text-text`}
+          className="my-auto flex h-6 w-6 items-center justify-center rounded text-base text-text-muted outline-none hover:bg-surface-hover hover:text-text focus-visible:outline-2 focus-visible:outline-focus-ring"
         >
           +
         </button>
@@ -296,14 +297,25 @@ export function ShelfBar() {
           </button>
         </>
       ) : null}
-      <button
-        type="button"
-        aria-pressed={customising}
-        onClick={() => setCustomising(!customising)}
-        className={`${control} border border-control-border text-text hover:bg-surface-sunken`}
-      >
-        {customising ? "Done" : "Customise"}
-      </button>
+      {customising ? (
+        <button
+          type="button"
+          onClick={() => setCustomising(false)}
+          className={`${control} bg-accent font-medium text-text-on-accent hover:bg-accent-hover`}
+        >
+          Done
+        </button>
+      ) : (
+        <button
+          type="button"
+          aria-label="Customise"
+          title="Customise this shelf"
+          onClick={() => setCustomising(true)}
+          className="flex h-6 w-6 items-center justify-center rounded text-text-muted outline-none hover:bg-surface-hover hover:text-text focus-visible:outline-2 focus-visible:outline-focus-ring"
+        >
+          <SlidersIcon />
+        </button>
+      )}
     </div>
   );
 }

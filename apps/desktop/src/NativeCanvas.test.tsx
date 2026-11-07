@@ -51,7 +51,7 @@ describe("native canvas", () => {
     expect(backend.setCanvasLayout).toHaveBeenCalledWith(
       expect.objectContaining({
         scale: window.devicePixelRatio,
-        backdrop: [217, 212, 200, 255],
+        backdrop: [185, 188, 193, 255],
       }),
     );
   });
@@ -77,7 +77,7 @@ describe("native canvas", () => {
     act(() => useApp.getState().setTheme("dark"));
     await waitFor(() =>
       expect(backend.setCanvasLayout).toHaveBeenLastCalledWith(
-        expect.objectContaining({ backdrop: [15, 16, 18, 255] }),
+        expect.objectContaining({ backdrop: [58, 61, 67, 255] }),
       ),
     );
   });

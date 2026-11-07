@@ -8,15 +8,16 @@ import {
   useApp,
 } from "../store";
 
-export const heading =
-  "mb-1.5 text-[11px] font-semibold tracking-wide text-text-muted uppercase";
+export const heading = "mb-1 text-xs text-text-muted";
 
 const field =
-  "w-16 rounded border border-control-border bg-surface px-1.5 py-0.5 text-sm text-text tabular-nums";
+  "h-6 w-14 rounded border border-control-border bg-surface-sunken px-1.5 text-right text-sm text-text tabular-nums outline-none focus:border-accent";
 
 const segment = (on: boolean) =>
-  `flex-1 px-2 py-1 text-sm outline-none focus-visible:outline-2 focus-visible:outline-focus-ring ${
-    on ? "bg-accent text-text-on-accent" : "text-text hover:bg-surface-sunken"
+  `h-6 flex-1 px-2 text-sm outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus-ring ${
+    on
+      ? "bg-accent-muted text-text shadow-[inset_0_-2px_0_var(--color-accent)]"
+      : "text-text-muted hover:bg-surface-hover hover:text-text"
   }`;
 
 /** A titled group of controls in the Tool properties panel. */
@@ -28,7 +29,7 @@ export function Group({
   children: ReactNode;
 }) {
   return (
-    <div role="group" aria-label={label} className="mb-3 last:mb-0">
+    <div role="group" aria-label={label} className="mb-2.5 last:mb-0">
       <h3 className={heading}>{label}</h3>
       {children}
     </div>
@@ -93,7 +94,7 @@ function Segments<T extends string>({
       role="radiogroup"
       aria-label={label}
       title={title}
-      className="flex overflow-hidden rounded border border-control-border"
+      className="flex overflow-hidden rounded border border-control-border bg-surface-sunken"
     >
       {options.map((option) => (
         <button
@@ -143,7 +144,7 @@ export function ShapePicker() {
       <div
         role="radiogroup"
         aria-label="Shape"
-        className="grid grid-cols-2 gap-1"
+        className="grid grid-cols-2 overflow-hidden rounded border border-control-border bg-surface-sunken"
       >
         {SHAPES.map(({ value, label }) => (
           <button
@@ -152,7 +153,7 @@ export function ShapePicker() {
             role="radio"
             aria-checked={shapeKind === value}
             onClick={() => setShapeKind(value)}
-            className={`rounded border border-control-border ${segment(shapeKind === value)}`}
+            className={segment(shapeKind === value)}
           >
             {label}
           </button>
@@ -182,5 +183,9 @@ export function ShapePicker() {
 
 /** A short line of help under a tool's settings. */
 export function Hint({ children }: { children: ReactNode }) {
-  return <p className="text-xs leading-relaxed text-text-muted">{children}</p>;
+  return (
+    <p className="mt-1 border-t border-border pt-2 text-xs text-text-muted">
+      {children}
+    </p>
+  );
 }

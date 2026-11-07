@@ -175,6 +175,30 @@ describe("App shell", () => {
     await waitFor(() => expect(screen.queryByText("1 selected")).toBeNull());
   });
 
+  it("collapses panels and resizes the side panel, and remembers both", async () => {
+    localStorage.removeItem("celframe.layout");
+    render(<App />);
+    await screen.findByText("Bouncing ball");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Collapse Colour" }),
+    );
+    expect(screen.queryByRole("radiogroup", { name: "Swatches" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Expand Colour" })).toBeTruthy();
+
+    const edge = screen.getByRole("separator", { name: "Resize side panel" });
+    const before = Number(edge.getAttribute("aria-valuenow"));
+    edge.focus();
+    await userEvent.keyboard("{ArrowLeft}");
+    expect(Number(edge.getAttribute("aria-valuenow"))).toBe(before + 16);
+    expect(useApp.getState().document).not.toBeNull();
+
+    const stored = JSON.parse(localStorage.getItem("celframe.layout") ?? "{}");
+    expect(stored).toEqual({
+      collapsedPanels: ["colour"],
+      sidePanelWidth: before + 16,
+    });
+  });
+
   it("runs, customises and remembers shelves", async () => {
     localStorage.removeItem("celframe.shelves");
     vi.mocked(backend.getDocument).mockResolvedValue(view({ canUndo: true }));

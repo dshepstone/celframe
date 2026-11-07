@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { targetLayer, useApp } from "../store";
+import { Panel, panelIconButton } from "./Panel";
 import {
   EyeIcon,
   EyeOffIcon,
@@ -10,7 +11,7 @@ import {
 } from "./icons";
 
 const iconButton =
-  "flex h-7 w-7 items-center justify-center rounded text-text-muted outline-none hover:bg-surface-sunken hover:text-text focus-visible:outline-2 focus-visible:outline-focus-ring disabled:opacity-40";
+  "flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded text-text-muted outline-none hover:bg-surface-hover hover:text-text focus-visible:outline-2 focus-visible:outline-focus-ring aria-[pressed=false]:opacity-60";
 
 /** The first scene's layers, top layer first. Click a layer to draw on it. */
 export function LayersPanel() {
@@ -28,15 +29,15 @@ export function LayersPanel() {
   const target = targetLayer(scene.layers, activeLayer);
 
   return (
-    <section aria-label="Layers" className="flex min-h-0 flex-col">
-      <header className="flex items-center justify-between px-3 py-2">
-        <h2 className="text-xs font-semibold tracking-wide text-text-muted uppercase">
-          Layers
-        </h2>
-        <span className="flex gap-0.5">
+    <Panel
+      id="layers"
+      title="Layers"
+      grow
+      actions={
+        <>
           <button
             type="button"
-            className={iconButton}
+            className={panelIconButton}
             aria-label="Add layer"
             title="Add layer"
             onClick={() => void addLayer()}
@@ -45,7 +46,7 @@ export function LayersPanel() {
           </button>
           <button
             type="button"
-            className={iconButton}
+            className={panelIconButton}
             aria-label="Delete layer"
             title="Delete layer"
             disabled={!target || scene.layers.length <= 1}
@@ -60,13 +61,10 @@ export function LayersPanel() {
           >
             <TrashIcon />
           </button>
-        </span>
-      </header>
-      <ul
-        role="listbox"
-        aria-label="Layer list"
-        className="overflow-auto px-1.5 pb-2"
-      >
+        </>
+      }
+    >
+      <ul role="listbox" aria-label="Layer list" className="py-1">
         {layers.map((layer) => {
           const selected = layer.id === target?.id;
           return (
@@ -85,15 +83,15 @@ export function LayersPanel() {
                 }
               }}
               onDoubleClick={() => setRenaming(layer.id)}
-              className={`group flex items-center gap-1 rounded-md px-1 py-0.5 text-sm outline-none focus-visible:outline-2 focus-visible:outline-focus-ring ${
+              className={`group relative flex h-[26px] items-center gap-0.5 px-1.5 text-sm outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus-ring ${
                 selected
-                  ? "bg-accent text-text-on-accent"
-                  : "hover:bg-surface-sunken"
+                  ? "bg-accent-muted text-text before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-accent"
+                  : "text-text hover:bg-surface-hover"
               }`}
             >
               <button
                 type="button"
-                className={`${iconButton} ${selected ? "text-text-on-accent" : ""}`}
+                className={iconButton}
                 aria-label={`${layer.visible ? "Hide" : "Show"} ${layer.name}`}
                 aria-pressed={layer.visible}
                 onClick={(e) => {
@@ -110,7 +108,7 @@ export function LayersPanel() {
               </button>
               <button
                 type="button"
-                className={`${iconButton} ${selected ? "text-text-on-accent" : ""}`}
+                className={iconButton}
                 aria-label={`${layer.locked ? "Unlock" : "Lock"} ${layer.name}`}
                 aria-pressed={layer.locked}
                 onClick={(e) => {
@@ -130,7 +128,7 @@ export function LayersPanel() {
                   autoFocus
                   defaultValue={layer.name}
                   aria-label={`Rename ${layer.name}`}
-                  className="min-w-0 flex-1 rounded border border-control-border bg-surface px-1 text-text"
+                  className="ml-1 h-5 min-w-0 flex-1 rounded border border-accent bg-surface-sunken px-1 text-text outline-none"
                   onClick={(e) => e.stopPropagation()}
                   onBlur={() => setRenaming(null)}
                   onKeyDown={(e) => {
@@ -150,12 +148,14 @@ export function LayersPanel() {
                   }}
                 />
               ) : (
-                <span className="min-w-0 flex-1 truncate">{layer.name}</span>
+                <span className="ml-1 min-w-0 flex-1 truncate">
+                  {layer.name}
+                </span>
               )}
             </li>
           );
         })}
       </ul>
-    </section>
+    </Panel>
   );
 }

@@ -27,8 +27,8 @@ export function Timeline() {
       aria-label="Timeline"
       className="flex h-full min-h-0 flex-col bg-surface"
     >
-      <header className="flex items-center gap-3 border-b border-border px-3 py-1.5 text-xs">
-        <h2 className="font-semibold tracking-wide text-text-muted uppercase">
+      <header className="flex h-[26px] shrink-0 items-center gap-3 border-b border-border bg-surface-raised px-2.5 text-xs">
+        <h2 className="text-2xs font-semibold tracking-[0.06em] text-text-muted uppercase">
           Timeline
         </h2>
         <span className="text-text-muted">
@@ -41,11 +41,11 @@ export function Timeline() {
           className="self-start border-collapse text-xs"
           aria-label="Exposures"
         >
-          <thead className="sticky top-0 z-10 bg-surface-raised">
+          <thead className="sticky top-0 z-10 bg-surface">
             <tr>
               <th
                 scope="col"
-                className="sticky left-0 z-20 w-40 min-w-40 bg-surface-raised px-2 py-1 text-left font-medium text-text-muted"
+                className="sticky left-0 z-20 h-5 w-44 min-w-44 border-r border-border bg-surface px-2 text-left font-normal text-text-muted"
               >
                 Layer
               </th>
@@ -54,9 +54,9 @@ export function Timeline() {
                   key={i}
                   scope="col"
                   style={{ width: CELL, minWidth: CELL }}
-                  className={`border-l border-border py-1 text-center font-normal ${
+                  className={`h-5 border-l border-border text-center font-normal ${
                     i === 0
-                      ? "bg-accent text-text-on-accent"
+                      ? "text-accent shadow-[inset_0_-2px_0_var(--color-accent)]"
                       : i % 6 === 5
                         ? "text-text"
                         : "text-text-muted"
@@ -72,13 +72,13 @@ export function Timeline() {
               <tr
                 key={layer.id}
                 onClick={() => setActiveLayer(layer.id)}
-                className={layer.id === target?.id ? "bg-surface-sunken" : ""}
+                className={layer.id === target?.id ? "bg-accent-muted/60" : ""}
               >
                 <th
                   scope="row"
-                  className={`sticky left-0 z-10 truncate border-t border-border px-2 py-1 text-left font-normal ${
+                  className={`sticky left-0 z-10 h-[26px] truncate border-t border-r border-border px-2 text-left font-normal ${
                     layer.id === target?.id
-                      ? "bg-surface-sunken text-text"
+                      ? "bg-accent-muted text-text"
                       : "bg-surface text-text-muted"
                   } ${layer.visible ? "" : "line-through"}`}
                 >
@@ -114,7 +114,7 @@ function ExposureCells({ layer, frames }: { layer: Layer; frames: number }) {
         className="border-t border-l border-border p-0.5"
         aria-label={`Drawing ${number}, frames ${exposure.startFrame + 1} to ${exposure.startFrame + span}`}
       >
-        <div className="flex h-5 items-center rounded-sm bg-accent px-1 text-text-on-accent">
+        <div className="flex h-[18px] items-center rounded-sm border-l-2 border-accent bg-accent-muted px-1 text-text">
           {number}
         </div>
       </td>,
