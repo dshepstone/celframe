@@ -15,7 +15,12 @@ fn any_angle_turns_about_the_centre() {
     let [x, y] = turn.apply([2.0, 1.0]);
     let h = std::f64::consts::FRAC_1_SQRT_2;
     assert!((x - (1.0 + h)).abs() < 1e-12 && (y - (1.0 + h)).abs() < 1e-12);
-    assert_eq!(turn.apply([1.0, 1.0]), [1.0, 1.0]);
+    // Sine and cosine round differently on each platform, so allow a tiny error.
+    let [cx, cy] = turn.apply([1.0, 1.0]);
+    assert!(
+        (cx - 1.0).abs() < 1e-12 && (cy - 1.0).abs() < 1e-12,
+        "the centre stays put"
+    );
 }
 
 #[test]
