@@ -204,6 +204,22 @@ describe("App shell", () => {
     });
   });
 
+  it("shows the logo in the menu row and the full logo in About", async () => {
+    render(<App />);
+    await screen.findByText("Bouncing ball");
+    // Only the small mark shows until About opens.
+    expect(screen.getAllByRole("img", { name: "Celframe" })).toHaveLength(1);
+    await userEvent.click(screen.getByRole("button", { name: "Help" }));
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: "About Celframe" }),
+    );
+    const about = await screen.findByRole("dialog");
+    expect(within(about).getByRole("img", { name: "Celframe" })).toBeTruthy();
+    expect(about.textContent).toContain("GPL-3.0-or-later");
+    await userEvent.click(within(about).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
   it("runs, customises and remembers shelves", async () => {
     localStorage.removeItem("celframe.shelves");
     vi.mocked(backend.getDocument).mockResolvedValue(view({ canUndo: true }));

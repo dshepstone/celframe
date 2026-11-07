@@ -1,4 +1,9 @@
-# Celframe
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/logo-light.svg">
+    <img src="docs/brand/logo.svg" alt="Celframe" height="56">
+  </picture>
+</h1>
 
 Free, open-source 2D animation studio: clean-room, modern, built for students.
 
