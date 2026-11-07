@@ -32,6 +32,11 @@ vi.mock("./backend", () => ({
   },
 }));
 
+/** The Undo and Redo buttons in the menu row, not the ones on a shelf. */
+const history = () => within(screen.getByRole("group", { name: "History" }));
+const panel = () =>
+  within(screen.getByRole("region", { name: "Tool properties" }));
+
 const view = (overrides: Partial<DocumentView> = {}): DocumentView =>
   documentView(overrides);
 
@@ -65,7 +70,7 @@ describe("App shell", () => {
   it("disables undo and redo until the core allows them", async () => {
     render(<App />);
     await screen.findByText("Bouncing ball");
-    const undo = screen.getByRole("button", { name: "Undo" });
+    const undo = history().getByRole("button", { name: "Undo" });
     expect((undo as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -78,7 +83,7 @@ describe("App shell", () => {
     );
     render(<App />);
     await screen.findByText("Bouncing ball");
-    await userEvent.click(screen.getByRole("button", { name: "Undo" }));
+    await userEvent.click(history().getByRole("button", { name: "Undo" }));
     expect(await screen.findByText("Earlier")).toBeTruthy();
   });
 
@@ -87,7 +92,7 @@ describe("App shell", () => {
     vi.mocked(backend.undo).mockRejectedValue("the item no longer exists");
     render(<App />);
     await screen.findByText("Bouncing ball");
-    await userEvent.click(screen.getByRole("button", { name: "Undo" }));
+    await userEvent.click(history().getByRole("button", { name: "Undo" }));
     await waitFor(() =>
       expect(screen.getByRole("alert").textContent).toContain(
         "no longer exists",
@@ -170,6 +175,51 @@ describe("App shell", () => {
     await waitFor(() => expect(screen.queryByText("1 selected")).toBeNull());
   });
 
+  it("runs, customises and remembers shelves", async () => {
+    localStorage.removeItem("celframe.shelves");
+    vi.mocked(backend.getDocument).mockResolvedValue(view({ canUndo: true }));
+    vi.mocked(backend.undo).mockResolvedValue(view());
+    render(<App />);
+    await screen.findByText("Bouncing ball");
+    const bar = () => within(screen.getByRole("toolbar", { name: "Shelves" }));
+
+    expect(
+      bar().getByRole("tab", { name: "Quick", selected: true }),
+    ).toBeTruthy();
+    await userEvent.click(bar().getByRole("button", { name: "Undo" }));
+    expect(backend.undo).toHaveBeenCalledOnce();
+    const flip = bar().getByRole("button", { name: "Flip horizontally" });
+    expect((flip as HTMLButtonElement).disabled).toBe(true);
+
+    await userEvent.click(bar().getByRole("tab", { name: "Shapes" }));
+    await userEvent.click(bar().getByRole("button", { name: "Ellipse" }));
+    expect(useApp.getState().tool).toBe("shape");
+    expect(useApp.getState().shapeKind).toBe("ellipse");
+
+    await userEvent.click(bar().getByRole("button", { name: "New shelf" }));
+    expect(
+      bar().getByRole("tab", { name: "Shelf 3", selected: true }),
+    ).toBeTruthy();
+    await userEvent.dblClick(bar().getByRole("tab", { name: "Shelf 3" }));
+    await userEvent.type(
+      bar().getByRole("textbox", { name: "Rename Shelf 3" }),
+      "{Control>}a{/Control}Cleanup{Enter}",
+    );
+    await userEvent.click(bar().getByRole("button", { name: "Customise" }));
+    await userEvent.click(bar().getByRole("button", { name: "Add action" }));
+    await userEvent.type(
+      bar().getByRole("textbox", { name: "Find an action" }),
+      "fit{Enter}",
+    );
+    await userEvent.click(bar().getByRole("button", { name: "Done" }));
+    expect(
+      bar().getByRole("button", { name: "Fit scene in view" }),
+    ).toBeTruthy();
+
+    const stored = JSON.parse(localStorage.getItem("celframe.shelves") ?? "[]");
+    expect(stored.at(-1)).toMatchObject({ name: "Cleanup", actions: ["fit"] });
+  });
+
   it("shows each tool's settings in the Tool properties panel", async () => {
     vi.mocked(backend.undo).mockResolvedValue(view());
     vi.mocked(backend.getDocument).mockResolvedValue(view({ canUndo: true }));
@@ -185,7 +235,7 @@ describe("App shell", () => {
     await userEvent.keyboard("h");
     expect(within(panel).getByRole("button", { name: "Fit" })).toBeTruthy();
 
-    await userEvent.click(screen.getByRole("button", { name: "Undo" }));
+    await userEvent.click(history().getByRole("button", { name: "Undo" }));
     expect(backend.undo).toHaveBeenCalledOnce();
   });
 
@@ -214,13 +264,15 @@ describe("App shell", () => {
     });
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Flip vertically" }),
+      panel().getByRole("button", { name: "Flip vertically" }),
     );
     expect(backend.editSelection).toHaveBeenLastCalledWith({
       type: "flip",
       horizontal: false,
     });
-    await userEvent.click(screen.getByRole("button", { name: "Send to back" }));
+    await userEvent.click(
+      panel().getByRole("button", { name: "Send to back" }),
+    );
     expect(backend.editSelection).toHaveBeenLastCalledWith({
       type: "arrange",
       to: "back",
@@ -244,7 +296,7 @@ describe("App shell", () => {
     await userEvent.keyboard("v");
     expect(
       (
-        screen.getByRole("button", {
+        panel().getByRole("button", {
           name: "Flip horizontally",
         }) as HTMLButtonElement
       ).disabled,

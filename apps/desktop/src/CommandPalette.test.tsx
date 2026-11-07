@@ -83,7 +83,8 @@ describe("command palette", () => {
     await userEvent.keyboard("{ArrowDown}");
     expect(selected()).toContain("Open project");
     await userEvent.keyboard("{ArrowUp}{ArrowUp}");
-    expect(selected()).toContain("Collapse side panel");
+    const options = screen.getAllByRole("option");
+    expect(selected()).toBe(options.at(-1)?.textContent);
   });
 
   it("leaves out commands that can't run now", async () => {

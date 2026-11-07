@@ -13,6 +13,13 @@ import {
   type ViewChange,
   type ViewInfo,
 } from "./backend";
+import {
+  type Shelf,
+  loadShelves,
+  moveAction,
+  nextShelfName,
+  storeShelves,
+} from "./shelves";
 
 const THEME_KEY = "celframe.theme";
 
@@ -131,6 +138,18 @@ export interface AppState {
   setScaleStrokeWidths: (scale: boolean) => void;
   setSpaceHeld: (held: boolean) => void;
   changeView: (change: ViewChange) => Promise<void>;
+  /** The shelves under the menus. Null until loaded with `initShelves`. */
+  shelves: Shelf[] | null;
+  activeShelf: string | null;
+  /** Loads stored shelves, keeping only actions in `known`. Does nothing once loaded. */
+  initShelves: (known: ReadonlySet<string>) => void;
+  setActiveShelf: (id: string) => void;
+  addShelf: () => void;
+  renameShelf: (id: string, name: string) => void;
+  removeShelf: (id: string) => void;
+  addToShelf: (id: string, action: string) => void;
+  removeFromShelf: (id: string, index: number) => void;
+  moveOnShelf: (id: string, index: number, by: number) => void;
 }
 
 export const BRUSH_WIDTH_MIN = 0.5;
@@ -164,6 +183,16 @@ export const useApp = create<AppState>((set, get) => {
         set({ error: String(error) });
       }
     }
+  };
+
+  /** Replaces the shelves and stores them. */
+  const putShelves = (shelves: Shelf[], activeShelf = get().activeShelf) => {
+    storeShelves(shelves);
+    set({ shelves, activeShelf });
+  };
+  const editShelf = (id: string, change: (shelf: Shelf) => Shelf) => {
+    const shelves = get().shelves;
+    if (shelves) putShelves(shelves.map((s) => (s.id === id ? change(s) : s)));
   };
 
   return {
@@ -313,6 +342,54 @@ export const useApp = create<AppState>((set, get) => {
         ),
       }),
     setEraseWholeStrokes: (eraseWholeStrokes) => set({ eraseWholeStrokes }),
+    shelves: null,
+    activeShelf: null,
+    initShelves: (known) => {
+      if (get().shelves) return;
+      const shelves = loadShelves(known);
+      set({ shelves, activeShelf: shelves[0]?.id ?? null });
+    },
+    setActiveShelf: (activeShelf) => set({ activeShelf }),
+    addShelf: () => {
+      const shelves = get().shelves ?? [];
+      const shelf: Shelf = {
+        id: crypto.randomUUID(),
+        name: nextShelfName(shelves),
+        actions: [],
+      };
+      putShelves([...shelves, shelf], shelf.id);
+    },
+    renameShelf: (id, name) => {
+      const trimmed = name.trim();
+      if (trimmed) editShelf(id, (s) => ({ ...s, name: trimmed }));
+    },
+    removeShelf: (id) => {
+      const shelves = get().shelves ?? [];
+      if (shelves.length <= 1) return;
+      const index = shelves.findIndex((s) => s.id === id);
+      const rest = shelves.filter((s) => s.id !== id);
+      const active =
+        get().activeShelf === id
+          ? (rest[Math.max(0, index - 1)]?.id ?? null)
+          : get().activeShelf;
+      putShelves(rest, active);
+    },
+    addToShelf: (id, action) =>
+      editShelf(id, (s) =>
+        s.actions.includes(action)
+          ? s
+          : { ...s, actions: [...s.actions, action] },
+      ),
+    removeFromShelf: (id, index) =>
+      editShelf(id, (s) => ({
+        ...s,
+        actions: s.actions.filter((_, i) => i !== index),
+      })),
+    moveOnShelf: (id, index, by) =>
+      editShelf(id, (s) => ({
+        ...s,
+        actions: moveAction(s.actions, index, by),
+      })),
     setArt: (art) => {
       if (art !== get().art) void get().clearSelection();
       set({ art });

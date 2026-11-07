@@ -1,5 +1,6 @@
 import { Modal } from "@celframe/ui";
 import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { useActions } from "./actions";
 import { useApp } from "./store";
 
 export interface PaletteCommand {
@@ -20,75 +21,9 @@ export function matches(label: string, query: string): boolean {
     .every((word) => text.includes(word));
 }
 
+/** The command palette lists every action. See actions.tsx. */
 export function useCommands(): PaletteCommand[] {
-  const {
-    document: doc,
-    theme,
-    sidePanelOpen,
-    undo,
-    redo,
-    requestFileAction,
-    save,
-    saveAs,
-    toggleTheme,
-    setSidePanelOpen,
-  } = useApp();
-  return [
-    {
-      id: "new",
-      label: "New project",
-      shortcut: "Ctrl/Cmd+N",
-      enabled: true,
-      run: () => void requestFileAction("new"),
-    },
-    {
-      id: "open",
-      label: "Open project",
-      shortcut: "Ctrl/Cmd+O",
-      enabled: true,
-      run: () => void requestFileAction("open"),
-    },
-    {
-      id: "save",
-      label: "Save",
-      shortcut: "Ctrl/Cmd+S",
-      enabled: doc !== null,
-      run: () => void save(),
-    },
-    {
-      id: "save-as",
-      label: "Save as",
-      shortcut: "Ctrl/Cmd+Shift+S",
-      enabled: doc !== null,
-      run: () => void saveAs(),
-    },
-    {
-      id: "undo",
-      label: "Undo",
-      shortcut: "Ctrl/Cmd+Z",
-      enabled: doc?.canUndo ?? false,
-      run: () => void undo(),
-    },
-    {
-      id: "redo",
-      label: "Redo",
-      shortcut: "Ctrl/Cmd+Shift+Z",
-      enabled: doc?.canRedo ?? false,
-      run: () => void redo(),
-    },
-    {
-      id: "theme",
-      label: theme === "dark" ? "Use light theme" : "Use dark theme",
-      enabled: true,
-      run: toggleTheme,
-    },
-    {
-      id: "panel",
-      label: sidePanelOpen ? "Collapse side panel" : "Expand side panel",
-      enabled: true,
-      run: () => setSidePanelOpen(!sidePanelOpen),
-    },
-  ];
+  return useActions();
 }
 
 export function CommandPalette() {
