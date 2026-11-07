@@ -122,6 +122,21 @@ struct PointerSample {
     x: f64,
     y: f64,
     pressure: f32,
+    /// Shift was held. Shapes use it to constrain their proportions or angle.
+    #[serde(default)]
+    shift: bool,
+    /// Alt was held. Shapes use it to draw from their centre.
+    #[serde(default)]
+    alt: bool,
+}
+
+impl PointerSample {
+    fn constraints(&self) -> celframe_geom::Constraints {
+        celframe_geom::Constraints {
+            constrain: self.shift,
+            from_centre: self.alt,
+        }
+    }
 }
 
 /// The current pointer-to-scene mapping. Call with the session locked, keeping the lock order.
@@ -168,6 +183,7 @@ fn pen_down(
             mapping.min_distance(),
             options.unwrap_or_default(),
         )?;
+        session.set_shape_constraints(sample.constraints());
     }
     redraw(&app);
     Ok(())
@@ -183,6 +199,9 @@ fn pen_move(
     {
         let mut session = lock(&state)?;
         let mapping = mapping(&session, &canvas)?;
+        if let Some(last) = samples.last() {
+            session.set_shape_constraints(last.constraints());
+        }
         let samples: Vec<StrokeSample> =
             samples.into_iter().map(|s| to_scene(&mapping, s)).collect();
         session.pen_move(&samples)?;

@@ -57,7 +57,9 @@ export function App() {
   const [canvasRef, nativeCanvas] = useNativeCanvas<HTMLElement>(theme);
   usePenInput(
     canvasRef,
-    nativeCanvas && (tool === "pen" || tool === "eraser") && !spaceHeld,
+    nativeCanvas &&
+      (tool === "pen" || tool === "eraser" || tool === "shape") &&
+      !spaceHeld,
   );
   useCanvasNavigation(canvasRef, nativeCanvas);
 
@@ -74,6 +76,7 @@ export function App() {
       const action: Record<string, () => void> = {
         p: () => setTool("pen"),
         e: () => setTool("eraser"),
+        u: () => setTool("shape"),
         h: () => setTool("hand"),
         z: () => setTool("zoom"),
         l: () => toggleArt(),

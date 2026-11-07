@@ -2,7 +2,11 @@
 
 use std::path::{Path, PathBuf};
 
-use celframe_core::{Command, CommandError, Drawing, Exposure, History, Project, StrokeSample};
+use celframe_core::{
+    Command, CommandError, Drawing, DrawingId, Exposure, History, LayerId, Project, SceneId,
+    Stroke, StrokeId, StrokeSample,
+};
+use celframe_geom::{Constraints, Shape, shape_samples};
 
 use crate::eraser::EraserDrag;
 use crate::pen::{self, PenOptions, PenStroke, PenTool};
@@ -19,6 +23,22 @@ pub struct Session {
     pen: Option<PenStroke>,
     /// The eraser drag in progress, if the pen is down and erasing.
     eraser: Option<EraserDrag>,
+    /// The shape being dragged out, if the pen is down with the Shape tool.
+    shape: Option<ShapeDrag>,
+}
+
+/// A shape being dragged out. Its stroke is added on the first movement that gives it a size.
+struct ShapeDrag {
+    scene: SceneId,
+    layer: LayerId,
+    /// The drawing shown at frame 0. None until the shape's stroke creates one.
+    drawing: Option<DrawingId>,
+    stroke: Option<StrokeId>,
+    shape: Shape,
+    anchor: [f64; 2],
+    last: [f64; 2],
+    constraints: Constraints,
+    template: Stroke,
 }
 
 /// What the recovery copy on disk holds, as far as this session knows.
@@ -64,6 +84,7 @@ impl Session {
             recovery_pending: false,
             pen: None,
             eraser: None,
+            shape: None,
         }
     }
 
@@ -229,7 +250,7 @@ impl Session {
         min_distance: f64,
         options: PenOptions,
     ) -> Result<(), String> {
-        if self.pen.is_some() || self.eraser.is_some() {
+        if self.pen.is_some() || self.eraser.is_some() || self.shape.is_some() {
             self.pen_up()?;
         }
         if !pen::PEN_WIDTH_RANGE.contains(&options.width) {
@@ -250,31 +271,163 @@ impl Session {
             });
             return self.erase(&[first]);
         }
-        let drawing = match drawing {
-            Some(drawing) => drawing,
-            None => self.add_drawing_at_frame_0(scene, layer)?,
+        if let PenTool::Shape { shape } = options.tool {
+            let shape = Shape::from(shape);
+            if let Shape::Polygon { sides } = shape
+                && !celframe_geom::POLYGON_SIDES.contains(&sides)
+            {
+                return Err("A polygon needs 3 to 12 sides.".to_owned());
+            }
+            let point = [first.x, first.y];
+            self.shape = Some(ShapeDrag {
+                scene,
+                layer,
+                drawing,
+                stroke: None,
+                shape,
+                anchor: point,
+                last: point,
+                constraints: Constraints::default(),
+                template: Stroke {
+                    id: StrokeId::new(),
+                    base_width: options.width,
+                    color: options.color,
+                    art: options.art,
+                    samples: Vec::new(),
+                },
+            });
+            return Ok(());
+        }
+        let mut pen = None;
+        self.begin_stroke(scene, layer, drawing, |drawing| {
+            let (started, stroke) =
+                PenStroke::start((scene, layer, drawing), first, min_distance, options);
+            pen = Some(started);
+            stroke
+        })?;
+        self.pen = pen;
+        Ok(())
+    }
+
+    /// Sets which modifier keys change the shape being dragged, from the next movement.
+    pub fn set_shape_constraints(&mut self, constraints: Constraints) {
+        if let Some(shape) = self.shape.as_mut() {
+            shape.constraints = constraints;
+        }
+    }
+
+    /// Redraws the dragged shape to end at its last point, as part of its one undo step.
+    fn reshape(&mut self) -> Result<(), String> {
+        let Some(drag) = self.shape.as_ref() else {
+            return Ok(());
         };
-        let index = self
+        let Some(samples) = shape_samples(drag.shape, drag.anchor, drag.last, drag.constraints)
+        else {
+            return Ok(());
+        };
+        let (scene, layer) = (drag.scene, drag.layer);
+        let result = match (drag.drawing, drag.stroke) {
+            (Some(drawing), Some(stroke)) => [
+                Command::TruncateStrokeSamples {
+                    scene,
+                    layer,
+                    drawing,
+                    stroke,
+                    len: 0,
+                },
+                Command::AppendStrokeSamples {
+                    scene,
+                    layer,
+                    drawing,
+                    stroke,
+                    samples,
+                },
+            ]
+            .into_iter()
+            .try_for_each(|command| {
+                self.history
+                    .execute(&mut self.project, command)
+                    .map_err(|e| e.to_string())
+            }),
+            _ => {
+                let stroke = Stroke {
+                    samples,
+                    ..drag.template.clone()
+                };
+                let id = stroke.id;
+                self.begin_stroke(scene, layer, drag.drawing, |_| stroke)
+                    .map(|drawing| {
+                        let drag = self.shape.as_mut().expect("the drag is still open");
+                        drag.drawing = Some(drawing);
+                        drag.stroke = Some(id);
+                    })
+            }
+        };
+        if result.is_err() {
+            self.end_drags();
+        }
+        result
+    }
+
+    /// Adds a stroke as one undo step that later appends and reshapes merge into. When no
+    /// drawing is shown at frame 0, a new one is added in the same step.
+    fn begin_stroke(
+        &mut self,
+        scene: SceneId,
+        layer: LayerId,
+        drawing: Option<DrawingId>,
+        stroke: impl FnOnce(DrawingId) -> Stroke,
+    ) -> Result<DrawingId, String> {
+        let target = self
             .project
             .scenes
             .iter()
             .find(|s| s.id == scene)
             .and_then(|s| s.layers.iter().find(|l| l.id == layer))
-            .and_then(|l| l.drawings.iter().find(|d| d.id == drawing))
-            .map_or(0, |d| d.strokes.len());
-        let (pen, stroke) = PenStroke::start((scene, layer, drawing), first, min_distance, options);
-        let command = Command::AddStroke {
+            .ok_or("That layer no longer exists.")?;
+        let mut commands = Vec::new();
+        let (drawing, index) = match drawing {
+            Some(id) => {
+                let index = target
+                    .drawings
+                    .iter()
+                    .find(|d| d.id == id)
+                    .map_or(0, |d| d.strokes.len());
+                (id, index)
+            }
+            None => {
+                let new = Drawing::new();
+                let id = new.id;
+                commands.push(Command::AddDrawing {
+                    scene,
+                    layer,
+                    drawing: new,
+                    index: target.drawings.len(),
+                });
+                commands.push(Command::InsertExposure {
+                    scene,
+                    layer,
+                    exposure: Exposure::new(0, 1, id),
+                });
+                (id, 0)
+            }
+        };
+        commands.push(Command::AddStroke {
             scene,
             layer,
             drawing,
-            stroke,
+            stroke: stroke(drawing),
             index,
+        });
+        let command = if commands.len() == 1 {
+            commands.pop().expect("one command")
+        } else {
+            Command::Batch { commands }
         };
         self.history
             .begin_stroke(&mut self.project, command)
             .map_err(|e| e.to_string())?;
-        self.pen = Some(pen);
-        Ok(())
+        Ok(drawing)
     }
 
     /// Adds scene-space samples to the stroke in progress. Ignored when the pen isn't down.
@@ -282,6 +435,12 @@ impl Session {
         if self.eraser.is_some() {
             let samples: Vec<_> = samples.iter().copied().filter_map(pen::clean).collect();
             return self.erase(&samples);
+        }
+        if let Some(drag) = self.shape.as_mut() {
+            if let Some(last) = samples.iter().rev().copied().find_map(pen::clean) {
+                drag.last = [last.x, last.y];
+            }
+            return self.reshape();
         }
         let Some(pen) = self.pen.as_mut() else {
             return Ok(());
@@ -295,6 +454,9 @@ impl Session {
         if self.eraser.take().is_some() {
             self.history.end_group();
         }
+        if self.shape.take().is_some() {
+            self.history.end_stroke();
+        }
         if let Some(pen) = self.pen.take() {
             let target = (pen.scene, pen.layer, pen.drawing, pen.stroke);
             let samples = pen.finish();
@@ -306,6 +468,7 @@ impl Session {
 
     fn end_drags(&mut self) {
         self.pen = None;
+        self.shape = None;
         if self.eraser.take().is_some() {
             self.history.end_group();
         }
@@ -365,41 +528,6 @@ impl Session {
         self.history
             .execute(&mut self.project, command)
             .map_err(|e| e.to_string())
-    }
-
-    fn add_drawing_at_frame_0(
-        &mut self,
-        scene: celframe_core::SceneId,
-        layer: celframe_core::LayerId,
-    ) -> Result<celframe_core::DrawingId, String> {
-        let drawing = Drawing::new();
-        let id = drawing.id;
-        let index = self
-            .project
-            .scenes
-            .iter()
-            .find(|s| s.id == scene)
-            .and_then(|s| s.layers.iter().find(|l| l.id == layer))
-            .map_or(0, |l| l.drawings.len());
-        let commands = [
-            Command::AddDrawing {
-                scene,
-                layer,
-                drawing,
-                index,
-            },
-            Command::InsertExposure {
-                scene,
-                layer,
-                exposure: Exposure::new(0, 1, id),
-            },
-        ];
-        for command in commands {
-            self.history
-                .execute(&mut self.project, command)
-                .map_err(|e| e.to_string())?;
-        }
-        Ok(id)
     }
 }
 
@@ -717,6 +845,106 @@ mod tests {
         session.pen_move(&[sample(100.0, 0.0)]).unwrap();
         session.pen_up().unwrap();
         session
+    }
+
+    fn shape(shape: crate::pen::ShapeOption) -> PenOptions {
+        PenOptions {
+            tool: PenTool::Shape { shape },
+            ..PenOptions::default()
+        }
+    }
+
+    #[test]
+    fn a_dragged_shape_follows_the_pointer_and_is_one_undo_step() {
+        let mut session = Session::new(Project::starter("A"));
+        session
+            .pen_down(
+                sample(0.0, 0.0),
+                0.1,
+                shape(crate::pen::ShapeOption::Rectangle),
+            )
+            .unwrap();
+        session.pen_move(&[sample(10.0, 10.0)]).unwrap();
+        session.pen_move(&[sample(40.0, 20.0)]).unwrap();
+        session.pen_up().unwrap();
+
+        let strokes = strokes_at_frame_0(&session);
+        assert_eq!(strokes.len(), 1);
+        let xs: Vec<f64> = strokes[0].samples.iter().map(|s| s.x).collect();
+        assert_eq!(strokes[0].samples.len(), 5);
+        assert!(
+            xs.contains(&40.0) && !xs.contains(&10.0),
+            "only the last shape remains"
+        );
+        assert!(strokes[0].samples.iter().all(|s| s.pressure == 1.0));
+
+        session.undo().unwrap();
+        assert!(strokes_at_frame_0(&session).is_empty());
+        assert!(!session.view().can_undo, "the shape was a single step");
+    }
+
+    #[test]
+    fn a_shape_that_never_grows_adds_nothing() {
+        let mut session = Session::new(Project::starter("A"));
+        session
+            .pen_down(
+                sample(5.0, 5.0),
+                0.1,
+                shape(crate::pen::ShapeOption::Ellipse),
+            )
+            .unwrap();
+        session.pen_move(&[sample(5.0, 5.0)]).unwrap();
+        session.pen_up().unwrap();
+        assert!(strokes_at_frame_0(&session).is_empty());
+        assert!(!session.view().can_undo);
+    }
+
+    #[test]
+    fn modifier_keys_constrain_the_next_movement() {
+        let mut session = Session::new(Project::starter("A"));
+        session
+            .pen_down(
+                sample(0.0, 0.0),
+                0.1,
+                shape(crate::pen::ShapeOption::Rectangle),
+            )
+            .unwrap();
+        session.set_shape_constraints(Constraints {
+            constrain: true,
+            from_centre: true,
+        });
+        session.pen_move(&[sample(10.0, 4.0)]).unwrap();
+        session.pen_up().unwrap();
+        let samples = &strokes_at_frame_0(&session)[0].samples;
+        let max = |f: fn(&StrokeSample) -> f64| samples.iter().map(f).fold(f64::MIN, f64::max);
+        let min = |f: fn(&StrokeSample) -> f64| samples.iter().map(f).fold(f64::MAX, f64::min);
+        assert_eq!((min(|s| s.x), max(|s| s.x)), (-10.0, 10.0));
+        assert_eq!((min(|s| s.y), max(|s| s.y)), (-10.0, 10.0));
+    }
+
+    #[test]
+    fn a_polygon_with_too_few_sides_is_refused() {
+        let mut session = Session::new(Project::starter("A"));
+        let options = shape(crate::pen::ShapeOption::Polygon { sides: 2 });
+        assert!(session.pen_down(sample(0.0, 0.0), 0.1, options).is_err());
+    }
+
+    #[test]
+    fn the_first_stroke_on_an_empty_frame_is_one_undo_step() {
+        let mut project = Project::starter("A");
+        let layer = &mut project.scenes[0].layers[0];
+        layer.exposures.clear();
+        layer.drawings.clear();
+        let mut session = Session::new(project);
+        session
+            .pen_down(sample(0.0, 0.0), 0.1, PenOptions::default())
+            .unwrap();
+        session.pen_move(&[sample(20.0, 0.0)]).unwrap();
+        session.pen_up().unwrap();
+        assert_eq!(strokes_at_frame_0(&session).len(), 1);
+        session.undo().unwrap();
+        assert!(!session.view().can_undo);
+        assert!(session.project().scenes[0].layers[0].drawings.is_empty());
     }
 
     #[test]

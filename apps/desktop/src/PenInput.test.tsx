@@ -71,7 +71,7 @@ describe("pen input", () => {
     await renderWithCanvas();
     pointer("pointerDown", { clientX: 10, clientY: 20 });
     expect(backend.penDown).toHaveBeenCalledWith(
-      { x: 10, y: 20, pressure: 1 },
+      { x: 10, y: 20, pressure: 1, shift: false, alt: false },
       {
         width: 10,
         color: [0, 0, 0, 255],
@@ -87,8 +87,8 @@ describe("pen input", () => {
     // Both moves arrive in one batch, in order.
     expect(backend.penMove).toHaveBeenCalledTimes(1);
     expect(vi.mocked(backend.penMove).mock.calls[0]?.[0]).toEqual([
-      { x: 11, y: 21, pressure: 1 },
-      { x: 12, y: 22, pressure: 1 },
+      { x: 11, y: 21, pressure: 1, shift: false, alt: false },
+      { x: 12, y: 22, pressure: 1, shift: false, alt: false },
     ]);
 
     pointer("pointerUp", { clientX: 12, clientY: 22 });
@@ -101,7 +101,9 @@ describe("pen input", () => {
     pointer("pointerDown", { clientX: 0, clientY: 0 });
     pointer("pointerMove", { clientX: 5, clientY: 5 });
     pointer("pointerUp", {});
-    expect(backend.penMove).toHaveBeenCalledWith([{ x: 5, y: 5, pressure: 1 }]);
+    expect(backend.penMove).toHaveBeenCalledWith([
+      { x: 5, y: 5, pressure: 1, shift: false, alt: false },
+    ]);
     const [moveOrder = 0] = vi.mocked(backend.penMove).mock.invocationCallOrder;
     const [upOrder = 0] = vi.mocked(backend.penUp).mock.invocationCallOrder;
     expect(moveOrder).toBeGreaterThan(0);
@@ -117,7 +119,7 @@ describe("pen input", () => {
       clientY: 2,
     });
     expect(backend.penDown).toHaveBeenCalledWith(
-      { x: 1, y: 2, pressure: 0.35 },
+      { x: 1, y: 2, pressure: 0.35, shift: false, alt: false },
       expect.anything(),
     );
   });
