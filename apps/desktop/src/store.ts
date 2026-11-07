@@ -7,6 +7,8 @@ import {
   type Layer,
   type PenOptions,
   type RecoveryInfo,
+  type ViewChange,
+  type ViewInfo,
 } from "./backend";
 
 const THEME_KEY = "celframe.theme";
@@ -42,6 +44,9 @@ export type UnsavedChoice = "save" | "discard" | "cancel";
 
 export type Rgba = [number, number, number, number];
 
+/** The tools that work so far. */
+export type Tool = "pen" | "hand" | "zoom";
+
 /** The layer new strokes go to: the chosen one, or else the topmost visible, unlocked one. */
 export function targetLayer(
   layers: readonly Layer[],
@@ -67,6 +72,11 @@ export interface AppState {
   brushColor: Rgba;
   /** The layer chosen in the Layers panel, if any. */
   activeLayer: string | null;
+  tool: Tool;
+  /** Space is held, which pans with any tool. */
+  spaceHeld: boolean;
+  /** The canvas view, once the core has reported it. */
+  view: ViewInfo | null;
   load: () => Promise<void>;
   undo: () => Promise<void>;
   redo: () => Promise<void>;
@@ -90,6 +100,9 @@ export interface AppState {
   runCommand: (command: Command) => Promise<void>;
   addLayer: () => Promise<void>;
   penOptions: () => PenOptions;
+  setTool: (tool: Tool) => void;
+  setSpaceHeld: (held: boolean) => void;
+  changeView: (change: ViewChange) => Promise<void>;
 }
 
 export const BRUSH_WIDTH_MIN = 0.5;
@@ -135,6 +148,9 @@ export const useApp = create<AppState>((set, get) => {
     brushWidth: 10,
     brushColor: [0, 0, 0, 255],
     activeLayer: null,
+    tool: "pen",
+    spaceHeld: false,
+    view: null,
     load: async () => {
       await sync(backend.getDocument());
       try {
@@ -206,6 +222,15 @@ export const useApp = create<AppState>((set, get) => {
       if (await sync(backend.addLayer())) {
         const layers = get().document?.project.scenes[0]?.layers ?? [];
         set({ activeLayer: layers[layers.length - 1]?.id ?? null });
+      }
+    },
+    setTool: (tool) => set({ tool }),
+    setSpaceHeld: (spaceHeld) => set({ spaceHeld }),
+    changeView: async (change) => {
+      try {
+        set({ view: await backend.changeView(change) });
+      } catch (error) {
+        set({ error: String(error) });
       }
     },
     penOptions: () => {
