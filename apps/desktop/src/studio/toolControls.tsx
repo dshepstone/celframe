@@ -129,6 +129,22 @@ export function ArtSwitch({ label }: { label: string }) {
   );
 }
 
+/** Chooses whether dragging from empty space draws a box or a lasso. */
+export function SelectModeSwitch() {
+  const { selectMode, setSelectMode } = useApp();
+  return (
+    <Segments
+      label="Drag selects with"
+      value={selectMode}
+      onChange={setSelectMode}
+      options={[
+        { value: "box", label: "Box" },
+        { value: "lasso", label: "Lasso" },
+      ]}
+    />
+  );
+}
+
 const SHAPES: { value: ShapeKind; label: string }[] = [
   { value: "line", label: "Line" },
   { value: "rectangle", label: "Rectangle" },

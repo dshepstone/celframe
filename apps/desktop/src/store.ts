@@ -176,6 +176,9 @@ export interface AppState {
   addLayer: () => Promise<void>;
   penOptions: () => PenOptions;
   setTool: (tool: Tool) => void;
+  /** How dragging from empty space selects with the Select tool. */
+  selectMode: "box" | "lasso";
+  setSelectMode: (mode: "box" | "lasso") => void;
   setArt: (art: Art) => void;
   setEraserWidth: (width: number) => void;
   setEraseWholeStrokes: (whole: boolean) => void;
@@ -364,7 +367,17 @@ export const useApp = create<AppState>((set, get) => {
         set({ activeLayer: layers[layers.length - 1]?.id ?? null });
       }
     },
-    setTool: (tool) => set({ tool }),
+    setTool: (tool) => {
+      if ((tool === "select") !== (get().tool === "select")) {
+        // Handles show only with the Select tool. Outside the desktop app this does nothing.
+        Promise.resolve()
+          .then(() => backend.setHandlesVisible(tool === "select"))
+          .catch(() => undefined);
+      }
+      set({ tool });
+    },
+    selectMode: "box",
+    setSelectMode: (selectMode) => set({ selectMode }),
     setSpaceHeld: (spaceHeld) => set({ spaceHeld }),
     changeView: async (change) => {
       try {
@@ -392,7 +405,11 @@ export const useApp = create<AppState>((set, get) => {
                     : { type: state.shapeKind },
               }
             : state.tool === "select"
-              ? { type: "select" }
+              ? {
+                  type: "select",
+                  lasso: state.selectMode === "lasso",
+                  scaleWidths: state.scaleStrokeWidths,
+                }
               : { type: "draw" },
       };
     },

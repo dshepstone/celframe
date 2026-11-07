@@ -62,3 +62,26 @@ fn a_box_selects_strokes_with_any_part_inside_it() {
         "beside the box"
     );
 }
+
+#[test]
+fn a_lasso_selects_strokes_with_any_part_inside_it() {
+    use celframe_geom::{inside_polygon, stroke_touches_lasso};
+    // A triangle with its point at the top.
+    let lasso = [[0.0, 0.0], [10.0, 0.0], [5.0, 10.0]];
+    assert!(inside_polygon([5.0, 2.0], &lasso));
+    assert!(!inside_polygon([1.0, 8.0], &lasso));
+
+    let through = stroke(1.0, &[(-5.0, 2.0), (15.0, 2.0)]);
+    assert!(
+        stroke_touches_lasso(&through, &lasso),
+        "crosses with both ends outside"
+    );
+    let beside = stroke(1.0, &[(0.0, 9.0), (1.0, 9.0)]);
+    assert!(!stroke_touches_lasso(&beside, &lasso));
+    let inside = stroke(1.0, &[(5.0, 3.0)]);
+    assert!(stroke_touches_lasso(&inside, &lasso));
+    assert!(
+        !stroke_touches_lasso(&inside, &lasso[..2]),
+        "two points enclose nothing"
+    );
+}

@@ -47,3 +47,22 @@ Changes the drawing order of the selected strokes within their drawing. Colour a
 | ----------------- | --------- |
 | Flip horizontally | `Shift+H` |
 | Flip vertically   | `Shift+V` |
+
+## On-canvas handles
+
+While the Select tool is active and something is selected, the selection's box shows handles. The box is drawn around the strokes' painted area.
+
+| Handle     | Where                          | Dragging it                                |
+| ---------- | ------------------------------ | ------------------------------------------ |
+| Corner (4) | The box's corners              | Scales both ways about the opposite corner |
+| Edge (4)   | The middle of each side        | Scales one way about the opposite side     |
+| Rotate     | 24 screen pixels above the top | Turns about the box's centre               |
+
+- **Shift** keeps proportions on corner handles and snaps rotation to 15° steps.
+- **Alt** scales about the box's centre instead of the opposite side.
+- Modifier keys take effect on the next pointer movement.
+- Handles are 8 screen pixels across and can be grabbed from 5 screen pixels away. Handles win over strokes under them.
+- Scaling past the opposite side flips the selection, as a mirror would.
+- **Scale stroke widths** in the Tool properties panel applies to handle scaling too.
+- The strokes follow the pointer while dragging. Releasing applies the change as one undo step. A drag that ends where it started changes nothing.
+- Handles are hidden with every other tool.

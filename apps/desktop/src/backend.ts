@@ -80,7 +80,7 @@ export interface PenOptions {
     | { type: "draw" }
     | { type: "erase"; wholeStrokes: boolean }
     | { type: "shape"; shape: ShapeOption }
-    | { type: "select" };
+    | { type: "select"; lasso: boolean; scaleWidths: boolean };
 }
 
 export type ShapeKind = "line" | "rectangle" | "ellipse" | "polygon";
@@ -185,6 +185,9 @@ export const backend = {
   deleteSelection: () => invoke<DocumentView>("delete_selection"),
   nudgeSelection: (dx: number, dy: number) =>
     invoke<DocumentView>("nudge_selection", { dx, dy }),
+  setHandlesVisible: async (visible: boolean): Promise<void> => {
+    await invoke("set_handles_visible", { visible });
+  },
   editSelection: (edit: SelectionEdit) =>
     invoke<DocumentView>("edit_selection", { edit }),
   closeWindow: async (): Promise<void> => {
