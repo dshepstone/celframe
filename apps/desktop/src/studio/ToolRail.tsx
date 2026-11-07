@@ -20,7 +20,7 @@ interface Tool {
 
 export const TOOLS: Tool[] = [
   { id: "pen", label: "Pen", shortcut: "P", icon: <PenIcon /> },
-  { id: "eraser", label: "Eraser", icon: <EraserIcon />, later: "Phase 2" },
+  { id: "eraser", label: "Eraser", shortcut: "E", icon: <EraserIcon /> },
   { id: "fill", label: "Fill", icon: <FillIcon />, later: "Phase 2" },
   { id: "select", label: "Select", icon: <SelectIcon />, later: "Phase 2" },
   { id: "hand", label: "Pan", shortcut: "H", icon: <HandIcon /> },

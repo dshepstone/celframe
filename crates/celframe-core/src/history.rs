@@ -14,6 +14,8 @@ pub struct History {
     saved_state: u64,
     /// The stroke whose appended samples merge into its original undo entry.
     open_stroke: Option<StrokeId>,
+    /// Edits merge into one undo entry until `end_group`. True once the group has an entry.
+    open_group: Option<bool>,
 }
 
 /// A reversing command, and the document state that exists before it runs.
@@ -71,12 +73,44 @@ impl History {
             return Ok(());
         }
         self.open_stroke = None;
-        self.undo.push(Entry {
-            command: inverse,
-            target_state: self.current_state,
-        });
+        if self.open_group == Some(true)
+            && let Some(entry) = self.undo.last_mut()
+        {
+            // Undo reverses the newest edit first, then everything before it in the group.
+            let earlier = std::mem::replace(
+                &mut entry.command,
+                Command::Batch {
+                    commands: Vec::new(),
+                },
+            );
+            let mut commands = vec![inverse];
+            match earlier {
+                Command::Batch { commands: rest } => commands.extend(rest),
+                other => commands.push(other),
+            }
+            entry.command = Command::Batch { commands };
+        } else {
+            self.undo.push(Entry {
+                command: inverse,
+                target_state: self.current_state,
+            });
+            if self.open_group.is_some() {
+                self.open_group = Some(true);
+            }
+        }
         self.finish_edit();
         Ok(())
+    }
+
+    /// Merges the edits that follow into one undo step, until `end_group`, undo or redo.
+    /// Used for edits made by one drag, such as erasing.
+    pub fn begin_group(&mut self) {
+        self.open_stroke = None;
+        self.open_group = Some(false);
+    }
+
+    pub fn end_group(&mut self) {
+        self.open_group = None;
     }
 
     /// Adds a stroke and merges later samples for it, until `end_stroke` or another edit.
@@ -107,6 +141,7 @@ impl History {
     /// Returns false when there is nothing to undo.
     pub fn undo(&mut self, project: &mut Project) -> Result<bool, CommandError> {
         self.open_stroke = None;
+        self.open_group = None;
         Self::step(
             &mut self.undo,
             &mut self.redo,
@@ -118,6 +153,7 @@ impl History {
     /// Returns false when there is nothing to redo.
     pub fn redo(&mut self, project: &mut Project) -> Result<bool, CommandError> {
         self.open_stroke = None;
+        self.open_group = None;
         Self::step(
             &mut self.redo,
             &mut self.undo,

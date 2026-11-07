@@ -1,5 +1,11 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
@@ -104,13 +110,34 @@ describe("App shell", () => {
     expect(document.documentElement.dataset.theme).toBe("dark");
   });
 
-  it("has a tool rail where only the pen works for now", async () => {
+  it("has a tool rail where later tools are marked as coming", async () => {
     render(<App />);
     await screen.findByText("Bouncing ball");
     const pen = screen.getByRole("button", { name: "Pen" });
     expect(pen.getAttribute("aria-pressed")).toBe("true");
-    const eraser = screen.getByRole("button", { name: /Eraser/ });
-    expect((eraser as HTMLButtonElement).disabled).toBe(true);
+    const fill = screen.getByRole("button", { name: /Fill/ });
+    expect((fill as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("erases with the eraser's own size and mode", async () => {
+    render(<App />);
+    await screen.findByText("Bouncing ball");
+    await userEvent.keyboard("e");
+    expect(useApp.getState().tool).toBe("eraser");
+    const size = screen.getByRole("spinbutton", { name: "Eraser size" });
+    fireEvent.change(size, { target: { value: "35" } });
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Whole strokes" }),
+    );
+    expect(useApp.getState().penOptions()).toMatchObject({
+      width: 35,
+      tool: { type: "erase", wholeStrokes: true },
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Pen" }));
+    expect(useApp.getState().penOptions()).toMatchObject({
+      width: 10,
+      tool: { type: "draw" },
+    });
   });
 
   it("toggles a layer's visibility through the core", async () => {

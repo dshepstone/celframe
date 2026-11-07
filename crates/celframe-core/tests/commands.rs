@@ -210,3 +210,29 @@ fn invalid_exposures_are_rejected() {
         CommandError::Exposure(ExposureError::Overlap),
     );
 }
+
+reversible!(batch, f => Command::Batch { commands: vec![
+    Command::RemoveStroke { scene: f.scene, layer: f.layer, drawing: f.drawing, stroke: f.stroke },
+    Command::AddStroke { scene: f.scene, layer: f.layer, drawing: f.drawing, stroke: stroke(), index: 0 },
+    Command::RenameLayer { scene: f.scene, layer: f.layer, name: "B".into() },
+] });
+
+#[test]
+fn a_failing_batch_leaves_the_project_unchanged() {
+    let f = fixture();
+    let command = Command::Batch {
+        commands: vec![
+            Command::RenameLayer {
+                scene: f.scene,
+                layer: f.layer,
+                name: "B".into(),
+            },
+            Command::RemoveScene {
+                scene: SceneId::new(),
+            },
+        ],
+    };
+    let mut project = f.project.clone();
+    assert_eq!(command.apply(&mut project), Err(CommandError::NotFound));
+    assert_eq!(project, f.project);
+}

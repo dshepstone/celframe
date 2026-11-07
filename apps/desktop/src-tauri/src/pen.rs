@@ -22,6 +22,25 @@ pub struct PenOptions {
     /// The part of the drawing to draw on. Line art if the UI sends none.
     #[serde(default)]
     pub art: Art,
+    /// Whether the pen draws or erases. Drawing if the UI sends none.
+    #[serde(default)]
+    pub tool: PenTool,
+}
+
+/// What a pen drag does. When erasing, `width` is the eraser's diameter.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Deserialize)]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum PenTool {
+    #[default]
+    Draw,
+    Erase {
+        /// Remove every stroke the eraser touches, instead of cutting it.
+        whole_strokes: bool,
+    },
 }
 
 impl Default for PenOptions {
@@ -31,6 +50,7 @@ impl Default for PenOptions {
             color: PEN_COLOR,
             layer: None,
             art: Art::Line,
+            tool: PenTool::Draw,
         }
     }
 }

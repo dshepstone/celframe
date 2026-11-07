@@ -103,6 +103,11 @@ pub enum Command {
         stroke: StrokeId,
         len: usize,
     },
+    /// Several commands applied in order as one edit. If one fails, the ones before it are
+    /// reversed, so the project is unchanged.
+    Batch {
+        commands: Vec<Command>,
+    },
 }
 
 impl Command {
@@ -327,6 +332,24 @@ impl Command {
                     stroke,
                     len,
                 })
+            }
+            Command::Batch { commands } => {
+                let mut inverses = Vec::with_capacity(commands.len());
+                for command in commands {
+                    match command.apply(project) {
+                        Ok(inverse) => inverses.push(inverse),
+                        Err(error) => {
+                            for inverse in inverses.into_iter().rev() {
+                                inverse
+                                    .apply(project)
+                                    .expect("reversing a command that just ran succeeds");
+                            }
+                            return Err(error);
+                        }
+                    }
+                }
+                inverses.reverse();
+                Ok(Command::Batch { commands: inverses })
             }
             Command::TruncateStrokeSamples {
                 scene,
