@@ -25,6 +25,56 @@ export const PenIcon = () => (
     <path d="M11 6l3 3" />
   </Icon>
 );
+export const FlipHorizontalIcon = () => (
+  <Icon>
+    <path d="M10 3v14" strokeDasharray="1.5 2" />
+    <path d="M8 6L3 14h5z" />
+    <path d="M12 6l5 8h-5z" />
+  </Icon>
+);
+export const FlipVerticalIcon = () => (
+  <Icon>
+    <path d="M3 10h14" strokeDasharray="1.5 2" />
+    <path d="M6 8l8-5v5z" />
+    <path d="M6 12l8 5v-5z" />
+  </Icon>
+);
+export const RotateLeftIcon = () => (
+  <Icon>
+    <path d="M5 9a5.5 5.5 0 1 1 1.6 5.4" />
+    <path d="M5 4.5V9h4.5" />
+  </Icon>
+);
+export const RotateRightIcon = () => (
+  <Icon>
+    <path d="M15 9a5.5 5.5 0 1 0-1.6 5.4" />
+    <path d="M15 4.5V9h-4.5" />
+  </Icon>
+);
+export const ToFrontIcon = () => (
+  <Icon>
+    <rect x="3" y="9" width="8" height="8" rx="1" strokeDasharray="1.5 2" />
+    <rect x="8" y="3" width="9" height="9" rx="1" />
+  </Icon>
+);
+export const ForwardIcon = () => (
+  <Icon>
+    <rect x="4" y="8" width="9" height="9" rx="1" strokeDasharray="1.5 2" />
+    <path d="M14 10V3M11 6l3-3 3 3" />
+  </Icon>
+);
+export const BackwardIcon = () => (
+  <Icon>
+    <rect x="4" y="3" width="9" height="9" rx="1" strokeDasharray="1.5 2" />
+    <path d="M14 10v7M11 14l3 3 3-3" />
+  </Icon>
+);
+export const ToBackIcon = () => (
+  <Icon>
+    <rect x="3" y="3" width="9" height="9" rx="1" />
+    <rect x="8" y="8" width="9" height="9" rx="1" strokeDasharray="1.5 2" />
+  </Icon>
+);
 export const ShapeIcon = () => (
   <Icon>
     <rect x="3" y="8" width="8" height="8" rx="0.5" />

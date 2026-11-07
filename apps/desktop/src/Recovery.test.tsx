@@ -25,6 +25,7 @@ const view = (name: string, dirty = false): DocumentView => ({
   dirty,
   path: null,
   selection: [],
+  selectionBounds: null,
 });
 
 const question = /Celframe closed before your changes were saved/;

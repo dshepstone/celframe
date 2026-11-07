@@ -6,6 +6,7 @@ import { RecoveryDialog } from "./RecoveryDialog";
 import { useApp } from "./store";
 import { ColourPanel } from "./studio/ColourPanel";
 import { LayersPanel } from "./studio/LayersPanel";
+import { ToolProperties } from "./studio/ToolProperties";
 import { StatusBar } from "./studio/StatusBar";
 import { Timeline } from "./studio/Timeline";
 import { ToolOptions } from "./studio/ToolOptions";
@@ -56,6 +57,7 @@ export function App() {
     clearSelection,
     deleteSelection,
     nudgeSelection,
+    editSelection,
   } = useApp();
 
   const [canvasRef, nativeCanvas] = useNativeCanvas<HTMLElement>(theme);
@@ -82,6 +84,12 @@ export function App() {
       }
       // Scene units per arrow press. +Y is up in the scene.
       const step = event.shiftKey ? 10 : 1;
+      const lower = event.key.toLowerCase();
+      if (event.shiftKey && (lower === "h" || lower === "v")) {
+        event.preventDefault();
+        void editSelection({ type: "flip", horizontal: lower === "h" });
+        return;
+      }
       const action: Record<string, () => void> = {
         p: () => setTool("pen"),
         e: () => setTool("eraser"),
@@ -131,6 +139,7 @@ export function App() {
     clearSelection,
     deleteSelection,
     nudgeSelection,
+    editSelection,
   ]);
 
   useEffect(() => {
@@ -154,6 +163,18 @@ export function App() {
       } else if (key === "z" && !isTextField(event.target)) {
         event.preventDefault();
         void (event.shiftKey ? redo() : undo());
+      } else if (
+        ["[", "]", "{", "}"].includes(key) &&
+        !isTextField(event.target)
+      ) {
+        // Shift turns [ and ] into { and } on many layouts.
+        event.preventDefault();
+        const up = key === "]" || key === "}";
+        const all = event.shiftKey;
+        void editSelection({
+          type: "arrange",
+          to: up ? (all ? "front" : "forward") : all ? "back" : "backward",
+        });
       } else if (key === "a" && !isTextField(event.target)) {
         event.preventDefault();
         void selectAll();
@@ -167,7 +188,16 @@ export function App() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [setPaletteOpen, undo, redo, save, saveAs, requestFileAction]);
+  }, [
+    setPaletteOpen,
+    undo,
+    redo,
+    save,
+    saveAs,
+    requestFileAction,
+    selectAll,
+    editSelection,
+  ]);
 
   return (
     // No background here: the canvas area must stay see-through for the native canvas.
@@ -342,6 +372,7 @@ export function App() {
             aria-label="Side panels"
             className="flex w-64 flex-col border-l border-border bg-surface-raised"
           >
+            <ToolProperties />
             <div className="min-h-0 flex-1 overflow-auto">
               <LayersPanel />
             </div>
