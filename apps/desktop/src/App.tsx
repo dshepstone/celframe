@@ -12,6 +12,7 @@ import { ToolOptions } from "./studio/ToolOptions";
 import { ToolRail } from "./studio/ToolRail";
 import { UnsavedChangesDialog } from "./UnsavedChangesDialog";
 import { useNativeCanvas } from "./useNativeCanvas";
+import { useCanvasNavigation } from "./useCanvasNavigation";
 import { usePenInput } from "./usePenInput";
 
 const LATER = "Coming in a later phase";
@@ -45,10 +46,58 @@ export function App() {
     setTimelineOpen,
     setPaletteOpen,
     addLayer,
+    tool,
+    spaceHeld,
+    setTool,
+    setSpaceHeld,
+    changeView,
   } = useApp();
 
   const [canvasRef, nativeCanvas] = useNativeCanvas<HTMLElement>(theme);
-  usePenInput(canvasRef, nativeCanvas);
+  usePenInput(canvasRef, nativeCanvas && tool === "pen" && !spaceHeld);
+  useCanvasNavigation(canvasRef, nativeCanvas);
+
+  // Single-key shortcuts for tools and the view. Ignored while typing.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (isTextField(event.target)) return;
+      if (event.key === " ") {
+        event.preventDefault();
+        if (!event.repeat) setSpaceHeld(true);
+        return;
+      }
+      const action: Record<string, () => void> = {
+        p: () => setTool("pen"),
+        h: () => setTool("hand"),
+        z: () => setTool("zoom"),
+        "=": () => void changeView({ type: "zoom", factor: 1.25 }),
+        "+": () => void changeView({ type: "zoom", factor: 1.25 }),
+        "-": () => void changeView({ type: "zoom", factor: 0.8 }),
+        "0": () => void changeView({ type: "fit" }),
+        ",": () => void changeView({ type: "rotate", degrees: 15 }),
+        ".": () => void changeView({ type: "rotate", degrees: -15 }),
+      };
+      const run = action[event.key.toLowerCase()];
+      if (run) {
+        event.preventDefault();
+        run();
+      }
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.key === " ") setSpaceHeld(false);
+    };
+    // Releasing Space in another window must not leave panning stuck on.
+    const onBlur = () => setSpaceHeld(false);
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, [setTool, setSpaceHeld, changeView]);
 
   useEffect(() => {
     void load();
@@ -145,6 +194,34 @@ export function App() {
             label="View"
             items={[
               {
+                label: "Zoom in",
+                shortcut: "+",
+                onSelect: () => void changeView({ type: "zoom", factor: 1.25 }),
+              },
+              {
+                label: "Zoom out",
+                shortcut: "-",
+                onSelect: () => void changeView({ type: "zoom", factor: 0.8 }),
+              },
+              {
+                label: "Fit scene",
+                shortcut: "0",
+                onSelect: () => void changeView({ type: "fit" }),
+              },
+              {
+                label: "Rotate left",
+                shortcut: ",",
+                onSelect: () =>
+                  void changeView({ type: "rotate", degrees: 15 }),
+              },
+              {
+                label: "Rotate right",
+                shortcut: ".",
+                onSelect: () =>
+                  void changeView({ type: "rotate", degrees: -15 }),
+              },
+              "separator",
+              {
                 label: sidePanelOpen ? "Hide side panels" : "Show side panels",
                 onSelect: () => setSidePanelOpen(!sidePanelOpen),
               },
@@ -193,7 +270,13 @@ export function App() {
           data-native-canvas={nativeCanvas}
           className={`flex flex-1 touch-none items-center justify-center ${
             nativeCanvas
-              ? "cursor-crosshair bg-transparent"
+              ? `bg-transparent ${
+                  spaceHeld || tool === "hand"
+                    ? "cursor-grab"
+                    : tool === "zoom"
+                      ? "cursor-zoom-in"
+                      : "cursor-crosshair"
+                }`
               : "bg-canvas-backdrop"
           }`}
         />

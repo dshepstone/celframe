@@ -131,11 +131,13 @@ fn mapping(session: &Session, canvas: &CanvasState) -> Result<Mapping, String> {
         .first()
         .ok_or("The project has no scene to draw in.")?;
     let canvas = canvas.0.lock().map_err(|_| "the canvas is unavailable")?;
-    let layout = canvas
+    let canvas = canvas
         .as_ref()
-        .and_then(|canvas| canvas.layout())
         .ok_or("The canvas isn't ready to draw on.")?;
-    Ok(Mapping::new(scene, &layout))
+    let layout = canvas
+        .layout()
+        .ok_or("The canvas isn't ready to draw on.")?;
+    Ok(Mapping::new(scene, &layout, canvas.view()))
 }
 
 fn to_scene(mapping: &Mapping, sample: PointerSample) -> StrokeSample {
@@ -211,6 +213,102 @@ fn set_canvas_layout(
     }
     redraw(&app);
     Ok(true)
+}
+
+/// What the UI shows about the view: zoom as a percentage of one CSS pixel per scene unit,
+/// and rotation in degrees.
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ViewInfo {
+    zoom_percent: f64,
+    rotation_degrees: f64,
+    fitted: bool,
+}
+
+/// A point in CSS pixels from the window's top left.
+#[derive(Clone, Copy, Debug, Deserialize)]
+struct ScreenPoint {
+    x: f64,
+    y: f64,
+}
+
+/// How the view changes. Anchors default to the middle of the canvas.
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+enum ViewChange {
+    Zoom {
+        factor: f64,
+        anchor: Option<ScreenPoint>,
+    },
+    Pan {
+        dx: f64,
+        dy: f64,
+    },
+    Rotate {
+        degrees: f64,
+        anchor: Option<ScreenPoint>,
+    },
+    Fit,
+}
+
+/// Changes the canvas view. The view is display state, so it isn't undoable or saved.
+#[tauri::command]
+fn change_view(
+    app: AppHandle,
+    state: State<'_, SharedSession>,
+    canvas: State<'_, CanvasState>,
+    change: ViewChange,
+) -> Result<ViewInfo, String> {
+    let info = {
+        // Session first, then canvas: the same order as every other command.
+        let session = lock(&state)?;
+        let scene = session
+            .project()
+            .scenes
+            .first()
+            .ok_or("The project has no scene.")?;
+        let mut canvas = canvas.0.lock().map_err(|_| "the canvas is unavailable")?;
+        let canvas = canvas.as_mut().ok_or("The canvas isn't available.")?;
+        let layout = canvas.layout().ok_or("The canvas isn't ready yet.")?;
+        let size = canvas::viewport_size(&layout);
+        let current = canvas
+            .view()
+            .unwrap_or_else(|| canvas::fitted_view(scene, &layout));
+        // CSS pixels from the window's top left, to device pixels in the canvas area.
+        let viewport = layout.viewport();
+        let to_canvas = |p: Option<ScreenPoint>| match p {
+            Some(p) => [
+                p.x * layout.scale - f64::from(viewport[0]),
+                p.y * layout.scale - f64::from(viewport[1]),
+            ],
+            None => [size[0] / 2.0, size[1] / 2.0],
+        };
+        let next = match change {
+            ViewChange::Zoom { factor, anchor } => {
+                Some(current.zoomed_about(to_canvas(anchor), size, factor))
+            }
+            ViewChange::Pan { dx, dy } => {
+                Some(current.panned([dx * layout.scale, dy * layout.scale], size))
+            }
+            ViewChange::Rotate { degrees, anchor } => {
+                Some(current.rotated_about(to_canvas(anchor), size, degrees.to_radians()))
+            }
+            ViewChange::Fit => None,
+        };
+        canvas.set_view(next);
+        let shown = next.unwrap_or_else(|| canvas::fitted_view(scene, &layout));
+        ViewInfo {
+            zoom_percent: shown.zoom / layout.scale * 100.0,
+            rotation_degrees: shown.rotation.to_degrees(),
+            fitted: next.is_none(),
+        }
+    };
+    redraw(&app);
+    Ok(info)
 }
 
 // File pickers block, so the commands that show one are async and run off the main thread.
@@ -433,6 +531,7 @@ pub fn run() {
             restore_recovery,
             discard_recovery,
             set_canvas_layout,
+            change_view,
             pen_down,
             pen_move,
             pen_up

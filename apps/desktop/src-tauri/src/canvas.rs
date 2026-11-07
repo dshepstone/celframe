@@ -38,15 +38,28 @@ impl CanvasLayout {
     }
 }
 
-/// The frame drawn for a scene: its paper, fitted into the canvas area.
-pub fn frame_for(scene: &Scene, layout: &CanvasLayout, target_size: [u32; 2]) -> (Canvas, View) {
+/// The view that shows the whole scene frame in the canvas area.
+pub fn fitted_view(scene: &Scene, layout: &CanvasLayout) -> View {
+    let paper = Paper::scene_frame(scene.width, scene.height, PAPER);
+    View::fit(paper.rect, viewport_size(layout), FIT)
+}
+
+/// The canvas area's size in device pixels.
+pub fn viewport_size(layout: &CanvasLayout) -> [f64; 2] {
+    let viewport = layout.viewport();
+    [f64::from(viewport[2]), f64::from(viewport[3])]
+}
+
+/// The frame drawn for a scene: its paper, shown with `view`, or fitted when there is none.
+pub fn frame_for(
+    scene: &Scene,
+    layout: &CanvasLayout,
+    target_size: [u32; 2],
+    view: Option<View>,
+) -> (Canvas, View) {
     let paper = Paper::scene_frame(scene.width, scene.height, PAPER);
     let viewport = layout.viewport();
-    let view = View::fit(
-        paper.rect,
-        [f64::from(viewport[2]), f64::from(viewport[3])],
-        FIT,
-    );
+    let view = view.unwrap_or_else(|| fitted_view(scene, layout));
     let canvas = Canvas {
         target_size,
         viewport,
@@ -65,9 +78,9 @@ pub struct Mapping {
 }
 
 impl Mapping {
-    pub fn new(scene: &Scene, layout: &CanvasLayout) -> Self {
+    pub fn new(scene: &Scene, layout: &CanvasLayout, view: Option<View>) -> Self {
         // The target size doesn't affect the view, only where the viewport sits.
-        let (canvas, view) = frame_for(scene, layout, [u32::MAX, u32::MAX]);
+        let (canvas, view) = frame_for(scene, layout, [u32::MAX, u32::MAX], view);
         Self {
             layout: *layout,
             viewport: canvas.viewport,
@@ -93,6 +106,8 @@ pub struct WindowCanvas {
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
     layout: Option<CanvasLayout>,
+    /// The person's zoom, pan and rotation. None shows the fitted scene.
+    view: Option<View>,
 }
 
 impl WindowCanvas {
@@ -139,6 +154,7 @@ impl WindowCanvas {
             surface,
             config,
             layout: None,
+            view: None,
         })
     }
 
@@ -164,6 +180,15 @@ impl WindowCanvas {
         self.layout
     }
 
+    /// The view the canvas shows, or None for the fitted scene.
+    pub fn view(&self) -> Option<View> {
+        self.view
+    }
+
+    pub fn set_view(&mut self, view: Option<View>) {
+        self.view = view;
+    }
+
     /// Draws a scene's frame 0 and presents it. Does nothing until the UI has sent a layout.
     pub fn render(&mut self, scene: &Scene) {
         let Some(layout) = self.layout else {
@@ -179,7 +204,12 @@ impl WindowCanvas {
             }
             _ => return,
         };
-        let (canvas, view) = frame_for(scene, &layout, [self.config.width, self.config.height]);
+        let (canvas, view) = frame_for(
+            scene,
+            &layout,
+            [self.config.width, self.config.height],
+            self.view,
+        );
         let target = frame.texture.create_view(&Default::default());
         let mut encoder = self
             .renderer
@@ -231,8 +261,8 @@ mod tests {
             scale: 2.0,
             backdrop: [0, 0, 0, 255],
         };
-        let mapping = Mapping::new(&scene, &layout);
-        let (canvas, view) = frame_for(&scene, &layout, [4000, 4000]);
+        let mapping = Mapping::new(&scene, &layout, None);
+        let (canvas, view) = frame_for(&scene, &layout, [4000, 4000], None);
         let [vx, vy, vw, vh] = canvas.viewport.map(f64::from);
 
         // The middle of the canvas area is the scene origin.
@@ -252,9 +282,29 @@ mod tests {
     }
 
     #[test]
+    fn a_zoomed_and_turned_view_maps_pointers_through_the_same_view() {
+        let scene = Scene::new("Shot");
+        let layout = layout(2.0);
+        let size = viewport_size(&layout);
+        let view = fitted_view(&scene, &layout)
+            .zoomed_about([40.0, 30.0], size, 3.0)
+            .rotated_about([100.0, 80.0], size, 0.5)
+            .panned([12.0, -7.0], size);
+        let mapping = Mapping::new(&scene, &layout, Some(view));
+        let (canvas, drawn) = frame_for(&scene, &layout, [800, 600], Some(view));
+        assert_eq!(drawn, view);
+        let [vx, vy, ..] = canvas.viewport.map(f64::from);
+        let point = mapping.scene_point(70.0, 55.0);
+        let screen = view.scene_to_screen(point, size);
+        assert!((screen[0] + vx - 140.0).abs() < 1e-9);
+        assert!((screen[1] + vy - 110.0).abs() < 1e-9);
+        assert!((mapping.min_distance() - 0.5 / view.zoom).abs() < 1e-12);
+    }
+
+    #[test]
     fn the_scene_frame_is_fitted_into_the_canvas_area() {
         let scene = Scene::new("Shot");
-        let (canvas, view) = frame_for(&scene, &layout(1.0), [800, 600]);
+        let (canvas, view) = frame_for(&scene, &layout(1.0), [800, 600], None);
         assert_eq!(canvas.target_size, [800, 600]);
         assert_eq!(canvas.viewport, [10, 20, 301, 200]);
         assert_eq!(canvas.backdrop, [1, 2, 3, 255]);

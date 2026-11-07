@@ -2,7 +2,7 @@
 
 mod view;
 
-pub use view::View;
+pub use view::{MAX_ZOOM, MIN_ZOOM, View};
 
 use celframe_core::Stroke;
 use celframe_geom::{StrokeMesh, tessellate_stroke};

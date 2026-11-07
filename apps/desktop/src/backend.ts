@@ -42,6 +42,21 @@ export type Command =
   | { type: "removeLayer"; scene: string; layer: string }
   | { type: "moveLayer"; scene: string; layer: string; index: number };
 
+/** A change to the canvas view. Anchors are CSS pixels from the window's top left. */
+export type ViewChange =
+  | { type: "zoom"; factor: number; anchor?: { x: number; y: number } }
+  | { type: "pan"; dx: number; dy: number }
+  | { type: "rotate"; degrees: number; anchor?: { x: number; y: number } }
+  | { type: "fit" };
+
+/** The view after a change. 100% is one CSS pixel per scene unit. */
+export interface ViewInfo {
+  zoomPercent: number;
+  rotationDegrees: number;
+  /** True while the whole scene is fitted to the canvas. */
+  fitted: boolean;
+}
+
 /** What the next stroke looks like and where it goes. */
 export interface PenOptions {
   width: number;
@@ -103,6 +118,8 @@ export const backend = {
   executeCommand: (command: Command) =>
     invoke<DocumentView>("execute_command", { command }),
   addLayer: () => invoke<DocumentView>("add_layer"),
+  changeView: (change: ViewChange) =>
+    invoke<ViewInfo>("change_view", { change }),
   penDown: async (
     sample: PointerSample,
     options: PenOptions,

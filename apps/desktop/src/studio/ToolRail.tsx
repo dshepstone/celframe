@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useApp, type Tool as ToolId } from "../store";
 import {
   EraserIcon,
   FillIcon,
@@ -11,22 +12,24 @@ import {
 interface Tool {
   id: string;
   label: string;
+  shortcut?: string;
   icon: ReactNode;
   /** Why the tool isn't available yet, or undefined when it is. */
   later?: string;
 }
 
 export const TOOLS: Tool[] = [
-  { id: "pen", label: "Pen", icon: <PenIcon /> },
+  { id: "pen", label: "Pen", shortcut: "P", icon: <PenIcon /> },
   { id: "eraser", label: "Eraser", icon: <EraserIcon />, later: "Phase 2" },
   { id: "fill", label: "Fill", icon: <FillIcon />, later: "Phase 2" },
   { id: "select", label: "Select", icon: <SelectIcon />, later: "Phase 2" },
-  { id: "hand", label: "Pan", icon: <HandIcon />, later: "issue #22" },
-  { id: "zoom", label: "Zoom", icon: <ZoomIcon />, later: "issue #22" },
+  { id: "hand", label: "Pan", shortcut: "H", icon: <HandIcon /> },
+  { id: "zoom", label: "Zoom", shortcut: "Z", icon: <ZoomIcon /> },
 ];
 
-/** The vertical tool strip beside the canvas. Only the pen works in Phase 1. */
+/** The vertical tool strip beside the canvas. */
 export function ToolRail() {
+  const { tool: current, setTool } = useApp();
   return (
     <nav
       aria-label="Tools"
@@ -39,10 +42,13 @@ export function ToolRail() {
           aria-label={
             tool.later ? `${tool.label} (coming in ${tool.later})` : tool.label
           }
-          aria-pressed={tool.id === "pen"}
+          aria-pressed={tool.id === current}
+          onClick={() => setTool(tool.id as ToolId)}
           disabled={tool.later !== undefined}
           title={
-            tool.later ? `${tool.label}: coming in ${tool.later}` : tool.label
+            tool.later
+              ? `${tool.label}: coming in ${tool.later}`
+              : `${tool.label} (${tool.shortcut})`
           }
           className="flex h-8 w-8 items-center justify-center rounded-md text-text-muted outline-none hover:bg-surface-sunken hover:text-text focus-visible:outline-2 focus-visible:outline-focus-ring disabled:cursor-not-allowed disabled:opacity-40 aria-pressed:bg-accent aria-pressed:text-text-on-accent"
         >
