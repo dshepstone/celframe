@@ -63,6 +63,7 @@ fn new_stroke() -> Stroke {
         id: StrokeId::new(),
         base_width: 4.0,
         color: [0, 0, 0, 255],
+        art: celframe_core::Art::Line,
         samples: vec![sample(0.0)],
     }
 }

@@ -15,6 +15,7 @@ fn sample_project() -> Project {
         id: StrokeId::new(),
         base_width: 4.25,
         color: [10, 20, 30, 255],
+        art: celframe_core::Art::Colour,
         samples: vec![
             StrokeSample {
                 x: 0.1 + 0.2,

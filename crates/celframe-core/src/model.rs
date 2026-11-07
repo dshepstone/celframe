@@ -51,13 +51,14 @@ pub struct Scene {
 
 impl Scene {
     /// Strokes shown at a frame, bottom first: each visible layer's exposed drawing, in layer
-    /// order. Hidden layers and layers with nothing exposed draw nothing.
+    /// order, with each drawing's colour art below its line art. Hidden layers and layers with
+    /// nothing exposed draw nothing.
     pub fn visible_strokes(&self, frame: u32) -> impl Iterator<Item = &Stroke> {
         self.layers
             .iter()
             .filter(|layer| layer.visible)
             .filter_map(move |layer| layer.drawing_at(frame))
-            .flat_map(|drawing| drawing.strokes.iter())
+            .flat_map(Drawing::strokes_in_draw_order)
     }
 
     /// Creates a 1920 × 1080, 24 fps scene with one empty layer.
@@ -189,6 +190,21 @@ impl Drawing {
             strokes: Vec::new(),
         }
     }
+
+    /// Strokes bottom first: all colour art, then all line art, each part in list order.
+    pub fn strokes_in_draw_order(&self) -> impl Iterator<Item = &Stroke> {
+        let part = |art| self.strokes.iter().filter(move |s| s.art == art);
+        part(Art::Colour).chain(part(Art::Line))
+    }
+}
+
+/// Which part of a drawing a stroke belongs to. See `docs/specs/line-and-colour-art.md`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Art {
+    #[default]
+    Line,
+    Colour,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -199,6 +215,7 @@ pub struct Stroke {
     pub base_width: f64,
     /// Straight RGBA, 8 bits per channel.
     pub color: [u8; 4],
+    pub art: Art,
     pub samples: Vec<StrokeSample>,
 }
 

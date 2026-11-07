@@ -51,6 +51,7 @@ export function App() {
     setTool,
     setSpaceHeld,
     changeView,
+    toggleArt,
   } = useApp();
 
   const [canvasRef, nativeCanvas] = useNativeCanvas<HTMLElement>(theme);
@@ -71,6 +72,7 @@ export function App() {
         p: () => setTool("pen"),
         h: () => setTool("hand"),
         z: () => setTool("zoom"),
+        l: () => toggleArt(),
         "=": () => void changeView({ type: "zoom", factor: 1.25 }),
         "+": () => void changeView({ type: "zoom", factor: 1.25 }),
         "-": () => void changeView({ type: "zoom", factor: 0.8 }),
@@ -97,7 +99,7 @@ export function App() {
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
     };
-  }, [setTool, setSpaceHeld, changeView]);
+  }, [setTool, setSpaceHeld, changeView, toggleArt]);
 
   useEffect(() => {
     void load();
