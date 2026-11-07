@@ -25,6 +25,12 @@ export const PenIcon = () => (
     <path d="M11 6l3 3" />
   </Icon>
 );
+export const ShapeIcon = () => (
+  <Icon>
+    <rect x="3" y="8" width="8" height="8" rx="0.5" />
+    <circle cx="13" cy="7" r="4" />
+  </Icon>
+);
 export const EraserIcon = () => (
   <Icon>
     <path d="M3 13l7-7 5 5-5 5H6z" />

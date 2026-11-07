@@ -236,3 +236,35 @@ fn an_empty_group_adds_no_undo_step() {
     assert!(history.undo(&mut doc.project).unwrap());
     assert!(!history.can_undo());
 }
+
+#[test]
+fn reshaping_an_open_stroke_merges_into_its_undo_step() {
+    let mut doc = doc();
+    let mut history = History::new();
+    let stroke = new_stroke();
+    let add = doc.add(&stroke);
+    history.begin_stroke(&mut doc.project, add).unwrap();
+    for x in [1.0, 2.0, 3.0] {
+        let truncate = Command::TruncateStrokeSamples {
+            scene: doc.scene,
+            layer: doc.layer,
+            drawing: doc.drawing,
+            stroke: stroke.id,
+            len: 0,
+        };
+        history.execute(&mut doc.project, truncate).unwrap();
+        let append = doc.append(stroke.id, &[0.0, x]);
+        history.execute(&mut doc.project, append).unwrap();
+    }
+    history.end_stroke();
+    assert_eq!(doc.strokes()[0].samples.len(), 2);
+    assert_eq!(doc.strokes()[0].samples[1].x, 3.0);
+    assert!(history.undo(&mut doc.project).unwrap());
+    assert!(doc.strokes().is_empty());
+    assert!(
+        !history.can_undo(),
+        "the whole reshaped stroke was one step"
+    );
+    assert!(history.redo(&mut doc.project).unwrap());
+    assert_eq!(doc.strokes()[0].samples[1].x, 3.0);
+}

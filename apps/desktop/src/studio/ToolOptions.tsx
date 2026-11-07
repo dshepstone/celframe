@@ -1,5 +1,12 @@
 import { Button } from "@celframe/ui";
-import { BRUSH_WIDTH_MAX, BRUSH_WIDTH_MIN, useApp } from "../store";
+import type { ShapeKind } from "../backend";
+import {
+  BRUSH_WIDTH_MAX,
+  BRUSH_WIDTH_MIN,
+  POLYGON_SIDES_MAX,
+  POLYGON_SIDES_MIN,
+  useApp,
+} from "../store";
 import { rgbaToHex } from "./colour";
 
 const field =
@@ -45,6 +52,63 @@ function SizeControl({
   );
 }
 
+const SHAPES: { kind: ShapeKind; label: string }[] = [
+  { kind: "line", label: "Line" },
+  { kind: "rectangle", label: "Rectangle" },
+  { kind: "ellipse", label: "Ellipse" },
+  { kind: "polygon", label: "Polygon" },
+];
+
+const segment = (on: boolean) =>
+  `px-2 py-0.5 outline-none focus-visible:outline-2 focus-visible:outline-focus-ring ${
+    on ? "bg-accent text-text-on-accent" : "text-text hover:bg-surface-sunken"
+  }`;
+
+/** Picks the shape the Shape tool draws, and a polygon's sides. */
+function ShapePicker() {
+  const { shapeKind, setShapeKind, polygonSides, setPolygonSides } = useApp();
+  return (
+    <>
+      <span
+        role="radiogroup"
+        aria-label="Shape"
+        className="flex items-center rounded border border-control-border"
+      >
+        {SHAPES.map(({ kind, label }) => (
+          <button
+            key={kind}
+            type="button"
+            role="radio"
+            aria-checked={shapeKind === kind}
+            onClick={() => setShapeKind(kind)}
+            className={segment(shapeKind === kind)}
+          >
+            {label}
+          </button>
+        ))}
+      </span>
+      {shapeKind === "polygon" ? (
+        <label className="flex items-center gap-2">
+          <span className="text-text-muted">Sides</span>
+          <input
+            type="number"
+            min={POLYGON_SIDES_MIN}
+            max={POLYGON_SIDES_MAX}
+            step={1}
+            value={polygonSides}
+            onChange={(e) => {
+              const next = Number(e.target.value);
+              if (Number.isFinite(next) && next > 0) setPolygonSides(next);
+            }}
+            className={field}
+            aria-label="Sides"
+          />
+        </label>
+      ) : null}
+    </>
+  );
+}
+
 /** Chooses whether tools work on line art or colour art. */
 function ArtSwitch() {
   const { art, setArt } = useApp();
@@ -62,11 +126,7 @@ function ArtSwitch() {
           role="radio"
           aria-checked={art === part}
           onClick={() => setArt(part)}
-          className={`px-2 py-0.5 outline-none focus-visible:outline-2 focus-visible:outline-focus-ring ${
-            art === part
-              ? "bg-accent text-text-on-accent"
-              : "text-text hover:bg-surface-sunken"
-          }`}
+          className={segment(art === part)}
         >
           {part === "line" ? "Line art" : "Colour art"}
         </button>
@@ -118,7 +178,10 @@ export function ToolOptions() {
         </>
       ) : (
         <>
-          <span className="font-medium">Pen</span>
+          <span className="font-medium">
+            {tool === "shape" ? "Shape" : "Pen"}
+          </span>
+          {tool === "shape" ? <ShapePicker /> : null}
           <SizeControl
             label="Brush size"
             value={brushWidth}

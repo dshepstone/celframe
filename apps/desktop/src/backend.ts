@@ -75,9 +75,20 @@ export interface PenOptions {
   /** null draws on the topmost visible, unlocked layer. */
   layer: string | null;
   art: Art;
-  /** Draw, or erase with `width` as the eraser's diameter. */
-  tool: { type: "draw" } | { type: "erase"; wholeStrokes: boolean };
+  /** Draw, erase with `width` as the eraser's diameter, or drag out a shape. */
+  tool:
+    | { type: "draw" }
+    | { type: "erase"; wholeStrokes: boolean }
+    | { type: "shape"; shape: ShapeOption };
 }
+
+export type ShapeKind = "line" | "rectangle" | "ellipse" | "polygon";
+
+export type ShapeOption =
+  | { type: "line" }
+  | { type: "rectangle" }
+  | { type: "ellipse" }
+  | { type: "polygon"; sides: number };
 
 export interface DocumentView {
   project: Project;
@@ -110,6 +121,9 @@ export interface PointerSample {
   x: number;
   y: number;
   pressure: number;
+  /** Modifier keys, which shapes use. */
+  shift?: boolean;
+  alt?: boolean;
 }
 
 export const backend = {

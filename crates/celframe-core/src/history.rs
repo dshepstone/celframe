@@ -25,6 +25,15 @@ struct Entry {
     target_state: u64,
 }
 
+/// The stroke a command adds, looking inside batches for the last one.
+fn added_stroke(command: &Command) -> Option<StrokeId> {
+    match command {
+        Command::AddStroke { stroke, .. } => Some(stroke.id),
+        Command::Batch { commands } => commands.iter().rev().find_map(added_stroke),
+        _ => None,
+    }
+}
+
 impl History {
     pub fn new() -> Self {
         Self::default()
@@ -62,13 +71,16 @@ impl History {
 
     /// Applies a new edit. Redo is cleared only if the edit succeeds.
     pub fn execute(&mut self, project: &mut Project, command: Command) -> Result<(), CommandError> {
+        // Reshaping the open stroke merges too, which lets a shape redraw itself while dragged.
         let merges = matches!(
             &command,
-            Command::AppendStrokeSamples { stroke, .. } if self.open_stroke == Some(*stroke)
+            Command::AppendStrokeSamples { stroke, .. }
+                | Command::TruncateStrokeSamples { stroke, .. }
+                if self.open_stroke == Some(*stroke)
         );
         let inverse = command.apply(project)?;
         if merges {
-            // Undoing the entry that added the stroke already removes these samples.
+            // Undoing the entry that added the stroke already removes the whole stroke.
             self.finish_edit();
             return Ok(());
         }
@@ -119,15 +131,13 @@ impl History {
         project: &mut Project,
         command: Command,
     ) -> Result<(), CommandError> {
-        let stroke = match &command {
-            Command::AddStroke { stroke, .. } => Some(stroke.id),
-            _ => None,
-        };
+        let stroke = added_stroke(&command);
         self.execute(project, command)?;
         self.open_stroke = stroke;
         Ok(())
     }
 
+    /// Ends the merge `begin_stroke` opened.
     pub fn end_stroke(&mut self) {
         self.open_stroke = None;
     }

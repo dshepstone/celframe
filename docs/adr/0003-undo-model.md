@@ -11,7 +11,7 @@ Every edit must be undoable, and the Rust core is the single source of truth. Co
 - **Commands are a serializable enum.** The UI sends them as tagged JSON, and adding one forces every `match` to handle it.
 - **Each command returns its inverse when applied.** Undo applies the inverse, which returns the command for redo. No full document snapshots are stored.
 - **A failed command changes nothing.** It returns an error, and history stays as it was.
-- **Stroke merging is explicit.** `begin_stroke` opens a merge for one stroke, and appended samples for that stroke keep only the original undo entry. Undoing removes the whole stroke, and that removal captures the finished stroke for redo.
+- **Stroke merging is explicit.** `begin_stroke` opens a merge for one stroke, and appending or truncating samples of that stroke keeps only the original undo entry. Truncating lets a shape redraw itself while it's dragged. Undoing removes the whole stroke, and that removal captures the finished stroke for redo.
 - **A merge closes** on `end_stroke`, on undo or redo, and on any other command.
 - **Dirty state uses state IDs.** Each edit gets a new ID, so undoing back to the saved point reads as clean, while a saved point lost to a new edit stays dirty.
 

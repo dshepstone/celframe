@@ -7,6 +7,7 @@ import {
   type Layer,
   type Art,
   type PenOptions,
+  type ShapeKind,
   type RecoveryInfo,
   type ViewChange,
   type ViewInfo,
@@ -46,7 +47,7 @@ export type UnsavedChoice = "save" | "discard" | "cancel";
 export type Rgba = [number, number, number, number];
 
 /** The tools that work so far. */
-export type Tool = "pen" | "eraser" | "hand" | "zoom";
+export type Tool = "pen" | "eraser" | "shape" | "hand" | "zoom";
 
 /** The layer new strokes go to: the chosen one, or else the topmost visible, unlocked one. */
 export function targetLayer(
@@ -79,6 +80,8 @@ export interface AppState {
   eraserWidth: number;
   /** The eraser removes every stroke it touches instead of cutting it. */
   eraseWholeStrokes: boolean;
+  shapeKind: ShapeKind;
+  polygonSides: number;
   tool: Tool;
   /** Space is held, which pans with any tool. */
   spaceHeld: boolean;
@@ -111,6 +114,8 @@ export interface AppState {
   setArt: (art: Art) => void;
   setEraserWidth: (width: number) => void;
   setEraseWholeStrokes: (whole: boolean) => void;
+  setShapeKind: (kind: ShapeKind) => void;
+  setPolygonSides: (sides: number) => void;
   toggleArt: () => void;
   setSpaceHeld: (held: boolean) => void;
   changeView: (change: ViewChange) => Promise<void>;
@@ -118,6 +123,8 @@ export interface AppState {
 
 export const BRUSH_WIDTH_MIN = 0.5;
 export const BRUSH_WIDTH_MAX = 200;
+export const POLYGON_SIDES_MIN = 3;
+export const POLYGON_SIDES_MAX = 12;
 
 export const useApp = create<AppState>((set, get) => {
   // The core owns the document, so the UI only ever stores what it sends back.
@@ -162,6 +169,8 @@ export const useApp = create<AppState>((set, get) => {
     art: "line",
     eraserWidth: 20,
     eraseWholeStrokes: false,
+    shapeKind: "rectangle",
+    polygonSides: 5,
     tool: "pen",
     spaceHeld: false,
     view: null,
@@ -257,9 +266,25 @@ export const useApp = create<AppState>((set, get) => {
         art: state.art,
         tool: erasing
           ? { type: "erase", wholeStrokes: state.eraseWholeStrokes }
-          : { type: "draw" },
+          : state.tool === "shape"
+            ? {
+                type: "shape",
+                shape:
+                  state.shapeKind === "polygon"
+                    ? { type: "polygon", sides: state.polygonSides }
+                    : { type: state.shapeKind },
+              }
+            : { type: "draw" },
       };
     },
+    setShapeKind: (shapeKind) => set({ shapeKind }),
+    setPolygonSides: (sides) =>
+      set({
+        polygonSides: Math.min(
+          POLYGON_SIDES_MAX,
+          Math.max(POLYGON_SIDES_MIN, Math.round(sides)),
+        ),
+      }),
     setEraserWidth: (width) =>
       set({
         eraserWidth: Math.min(

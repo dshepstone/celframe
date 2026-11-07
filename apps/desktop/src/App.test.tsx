@@ -119,6 +119,26 @@ describe("App shell", () => {
     expect((fill as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it("drags out shapes with the pen's size and colour", async () => {
+    render(<App />);
+    await screen.findByText("Bouncing ball");
+    await userEvent.keyboard("u");
+    expect(useApp.getState().penOptions()).toMatchObject({
+      width: 10,
+      tool: { type: "shape", shape: { type: "rectangle" } },
+    });
+    await userEvent.click(screen.getByRole("radio", { name: "Polygon" }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Sides" }), {
+      target: { value: "40" },
+    });
+    expect(useApp.getState().penOptions().tool).toEqual({
+      type: "shape",
+      shape: { type: "polygon", sides: 12 },
+    });
+    await userEvent.click(screen.getByRole("radio", { name: "Line" }));
+    expect(screen.queryByRole("spinbutton", { name: "Sides" })).toBeNull();
+  });
+
   it("erases with the eraser's own size and mode", async () => {
     render(<App />);
     await screen.findByText("Bouncing ball");

@@ -6,7 +6,13 @@ function toSample(event: PointerEvent): PointerSample {
   // A mouse has no pressure. Touch that reports none uses full pressure too.
   const pressure =
     event.pointerType === "mouse" || event.pressure <= 0 ? 1 : event.pressure;
-  return { x: event.clientX, y: event.clientY, pressure };
+  return {
+    x: event.clientX,
+    y: event.clientY,
+    pressure,
+    shift: event.shiftKey,
+    alt: event.altKey,
+  };
 }
 
 /**

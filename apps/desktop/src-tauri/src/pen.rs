@@ -41,6 +41,33 @@ pub enum PenTool {
         /// Remove every stroke the eraser touches, instead of cutting it.
         whole_strokes: bool,
     },
+    /// Drag out a shape with the pen's size and colour.
+    Shape { shape: ShapeOption },
+}
+
+/// A shape as the UI names it. See `docs/specs/shape-tools.md`.
+#[derive(Clone, Copy, Debug, PartialEq, Deserialize)]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum ShapeOption {
+    Line,
+    Rectangle,
+    Ellipse,
+    Polygon { sides: u32 },
+}
+
+impl From<ShapeOption> for celframe_geom::Shape {
+    fn from(shape: ShapeOption) -> Self {
+        match shape {
+            ShapeOption::Line => Self::Line,
+            ShapeOption::Rectangle => Self::Rectangle,
+            ShapeOption::Ellipse => Self::Ellipse,
+            ShapeOption::Polygon { sides } => Self::Polygon { sides },
+        }
+    }
 }
 
 impl Default for PenOptions {
