@@ -52,13 +52,20 @@ export function App() {
     setSpaceHeld,
     changeView,
     toggleArt,
+    selectAll,
+    clearSelection,
+    deleteSelection,
+    nudgeSelection,
   } = useApp();
 
   const [canvasRef, nativeCanvas] = useNativeCanvas<HTMLElement>(theme);
   usePenInput(
     canvasRef,
     nativeCanvas &&
-      (tool === "pen" || tool === "eraser" || tool === "shape") &&
+      (tool === "pen" ||
+        tool === "eraser" ||
+        tool === "shape" ||
+        tool === "select") &&
       !spaceHeld,
   );
   useCanvasNavigation(canvasRef, nativeCanvas);
@@ -73,10 +80,20 @@ export function App() {
         if (!event.repeat) setSpaceHeld(true);
         return;
       }
+      // Scene units per arrow press. +Y is up in the scene.
+      const step = event.shiftKey ? 10 : 1;
       const action: Record<string, () => void> = {
         p: () => setTool("pen"),
         e: () => setTool("eraser"),
         u: () => setTool("shape"),
+        v: () => setTool("select"),
+        escape: () => void clearSelection(),
+        delete: () => void deleteSelection(),
+        backspace: () => void deleteSelection(),
+        arrowup: () => void nudgeSelection(0, step),
+        arrowdown: () => void nudgeSelection(0, -step),
+        arrowleft: () => void nudgeSelection(-step, 0),
+        arrowright: () => void nudgeSelection(step, 0),
         h: () => setTool("hand"),
         z: () => setTool("zoom"),
         l: () => toggleArt(),
@@ -106,7 +123,15 @@ export function App() {
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
     };
-  }, [setTool, setSpaceHeld, changeView, toggleArt]);
+  }, [
+    setTool,
+    setSpaceHeld,
+    changeView,
+    toggleArt,
+    clearSelection,
+    deleteSelection,
+    nudgeSelection,
+  ]);
 
   useEffect(() => {
     void load();
@@ -129,6 +154,9 @@ export function App() {
       } else if (key === "z" && !isTextField(event.target)) {
         event.preventDefault();
         void (event.shiftKey ? redo() : undo());
+      } else if (key === "a" && !isTextField(event.target)) {
+        event.preventDefault();
+        void selectAll();
       } else if (key === "s") {
         event.preventDefault();
         void (event.shiftKey ? saveAs() : save());
@@ -186,6 +214,24 @@ export function App() {
                 shortcut: "Ctrl+Shift+Z",
                 disabled: !doc?.canRedo,
                 onSelect: () => void redo(),
+              },
+              "separator",
+              {
+                label: "Select all",
+                shortcut: "Ctrl+A",
+                onSelect: () => void selectAll(),
+              },
+              {
+                label: "Deselect",
+                shortcut: "Esc",
+                disabled: !doc?.selection.length,
+                onSelect: () => void clearSelection(),
+              },
+              {
+                label: "Delete",
+                shortcut: "Del",
+                disabled: !doc?.selection.length,
+                onSelect: () => void deleteSelection(),
               },
               "separator",
               {

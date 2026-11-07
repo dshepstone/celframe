@@ -31,6 +31,7 @@ const view = (dirty: boolean): DocumentView => ({
   canRedo: false,
   dirty,
   path: null,
+  selection: [],
 });
 
 const canvas = () => screen.getByRole("main", { name: "Canvas" });

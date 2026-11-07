@@ -4,6 +4,7 @@ mod canvas;
 mod eraser;
 mod pen;
 mod recovery;
+mod select;
 mod session;
 
 use std::path::PathBuf;
@@ -53,7 +54,10 @@ fn redraw(app: &AppHandle) {
     if let Ok(mut canvas) = app.state::<CanvasState>().0.lock()
         && let Some(canvas) = canvas.as_mut()
     {
-        canvas.render(scene);
+        let overlay = canvas
+            .zoom(scene)
+            .map_or_else(Vec::new, |zoom| session.overlay(1.0 / zoom));
+        canvas.render(scene, &overlay);
     }
 }
 
@@ -94,6 +98,53 @@ fn execute_command(
 #[tauri::command]
 fn add_layer(app: AppHandle, state: State<'_, SharedSession>) -> Result<DocumentView, String> {
     let result = lock(&state)?.add_layer().map_err(|e| e.to_string());
+    redrawn(&app, result)
+}
+
+/// A part of the current layer's drawing, as the UI chose it.
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PartChoice {
+    layer: Option<celframe_core::LayerId>,
+    art: celframe_core::Art,
+}
+
+#[tauri::command]
+fn select_all(
+    app: AppHandle,
+    state: State<'_, SharedSession>,
+    part: PartChoice,
+) -> Result<DocumentView, String> {
+    let result = lock(&state)?.select_all(part.layer, part.art);
+    redrawn(&app, result)
+}
+
+#[tauri::command]
+fn clear_selection(
+    app: AppHandle,
+    state: State<'_, SharedSession>,
+) -> Result<DocumentView, String> {
+    let view = lock(&state)?.clear_selection();
+    redrawn(&app, Ok(view))
+}
+
+#[tauri::command]
+fn delete_selection(
+    app: AppHandle,
+    state: State<'_, SharedSession>,
+) -> Result<DocumentView, String> {
+    let result = lock(&state)?.delete_selection();
+    redrawn(&app, result)
+}
+
+#[tauri::command]
+fn nudge_selection(
+    app: AppHandle,
+    state: State<'_, SharedSession>,
+    dx: f64,
+    dy: f64,
+) -> Result<DocumentView, String> {
+    let result = lock(&state)?.nudge_selection([dx, dy]);
     redrawn(&app, result)
 }
 
@@ -178,12 +229,12 @@ fn pen_down(
     {
         let mut session = lock(&state)?;
         let mapping = mapping(&session, &canvas)?;
+        session.set_modifiers(sample.constraints());
         session.pen_down(
             to_scene(&mapping, sample),
             mapping.min_distance(),
             options.unwrap_or_default(),
         )?;
-        session.set_shape_constraints(sample.constraints());
     }
     redraw(&app);
     Ok(())
@@ -200,7 +251,7 @@ fn pen_move(
         let mut session = lock(&state)?;
         let mapping = mapping(&session, &canvas)?;
         if let Some(last) = samples.last() {
-            session.set_shape_constraints(last.constraints());
+            session.set_modifiers(last.constraints());
         }
         let samples: Vec<StrokeSample> =
             samples.into_iter().map(|s| to_scene(&mapping, s)).collect();
@@ -554,7 +605,11 @@ pub fn run() {
             change_view,
             pen_down,
             pen_move,
-            pen_up
+            pen_up,
+            select_all,
+            clear_selection,
+            delete_selection,
+            nudge_selection
         ])
         .build(tauri::generate_context!())
         .expect("the app failed to start")

@@ -25,6 +25,7 @@ const view = (canUndo: boolean): DocumentView => ({
   canRedo: false,
   dirty: false,
   path: null,
+  selection: [],
 });
 
 beforeEach(() => {

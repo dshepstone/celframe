@@ -1,7 +1,7 @@
 //! The native canvas: draws the open scene into the main window, under the transparent webview.
 //! See ADR-0001 and `docs/specs/canvas-rendering.md`.
 
-use celframe_core::Scene;
+use celframe_core::{Scene, Stroke};
 use celframe_render::{Canvas, Paper, RenderError, Renderer, View};
 use serde::Deserialize;
 use tauri::WebviewWindow;
@@ -189,8 +189,19 @@ impl WindowCanvas {
         self.view = view;
     }
 
-    /// Draws a scene's frame 0 and presents it. Does nothing until the UI has sent a layout.
-    pub fn render(&mut self, scene: &Scene) {
+    /// Device pixels per scene unit in the view drawn now. None until the UI sends a layout.
+    pub fn zoom(&self, scene: &Scene) -> Option<f64> {
+        let layout = self.layout?;
+        Some(
+            self.view
+                .unwrap_or_else(|| fitted_view(scene, &layout))
+                .zoom,
+        )
+    }
+
+    /// Draws a scene's frame 0 with `overlay` on top, and presents it. Does nothing until the
+    /// UI has sent a layout.
+    pub fn render(&mut self, scene: &Scene, overlay: &[Stroke]) {
         let Some(layout) = self.layout else {
             return;
         };
@@ -220,7 +231,7 @@ impl WindowCanvas {
             &target,
             self.config.format,
             &canvas,
-            scene.visible_strokes(0),
+            scene.visible_strokes(0).chain(overlay),
             &view,
         );
         self.renderer.submit(encoder);

@@ -43,6 +43,8 @@ pub enum PenTool {
     },
     /// Drag out a shape with the pen's size and colour.
     Shape { shape: ShapeOption },
+    /// Select and move strokes.
+    Select,
 }
 
 /// A shape as the UI names it. See `docs/specs/shape-tools.md`.

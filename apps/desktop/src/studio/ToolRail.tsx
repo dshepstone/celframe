@@ -24,7 +24,7 @@ export const TOOLS: Tool[] = [
   { id: "eraser", label: "Eraser", shortcut: "E", icon: <EraserIcon /> },
   { id: "shape", label: "Shape", shortcut: "U", icon: <ShapeIcon /> },
   { id: "fill", label: "Fill", icon: <FillIcon />, later: "Phase 2" },
-  { id: "select", label: "Select", icon: <SelectIcon />, later: "Phase 2" },
+  { id: "select", label: "Select", shortcut: "V", icon: <SelectIcon /> },
   { id: "hand", label: "Pan", shortcut: "H", icon: <HandIcon /> },
   { id: "zoom", label: "Zoom", shortcut: "Z", icon: <ZoomIcon /> },
 ];
