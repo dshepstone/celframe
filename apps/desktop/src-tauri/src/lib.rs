@@ -54,10 +54,16 @@ fn redraw(app: &AppHandle) {
     if let Ok(mut canvas) = app.state::<CanvasState>().0.lock()
         && let Some(canvas) = canvas.as_mut()
     {
-        let overlay = canvas
-            .zoom(scene)
-            .map_or_else(Vec::new, |zoom| session.overlay(1.0 / zoom));
-        canvas.render(scene, &overlay);
+        let (Some(zoom), Some(layout)) = (canvas.zoom(scene), canvas.layout()) else {
+            return;
+        };
+        let pixel = 1.0 / zoom;
+        let mode = canvas.mode();
+        // The frame's dimming and gate go under the selection's outlines and handles.
+        let mut overlay = canvas::frame_overlay(scene, mode, pixel, layout.backdrop);
+        overlay.extend(session.overlay(pixel));
+        let strokes = canvas::view_strokes(scene, mode, canvas.drawing_layer());
+        canvas.render(scene, strokes.into_iter(), &overlay);
     }
 }
 
@@ -392,11 +398,48 @@ fn change_view(
             ViewChange::Fit => None,
         };
         canvas.set_view(next);
-        let shown = next.unwrap_or_else(|| canvas::fitted_view(scene, &layout));
-        ViewInfo {
-            zoom_percent: shown.zoom / layout.scale * 100.0,
-            rotation_degrees: shown.rotation.to_degrees(),
-            fitted: next.is_none(),
+        view_info(canvas, scene, &layout)
+    };
+    redraw(&app);
+    Ok(info)
+}
+
+/// The current view's zoom and rotation, as the UI shows them.
+fn view_info(
+    canvas: &canvas::WindowCanvas,
+    scene: &celframe_core::Scene,
+    layout: &canvas::CanvasLayout,
+) -> ViewInfo {
+    let view = canvas.view();
+    let shown = view.unwrap_or_else(|| canvas::fitted_view(scene, layout));
+    ViewInfo {
+        zoom_percent: shown.zoom / layout.scale * 100.0,
+        rotation_degrees: shown.rotation.to_degrees(),
+        fitted: view.is_none(),
+    }
+}
+
+/// Shows the Drawing or Camera view. Returns that view's zoom and rotation, or None while the
+/// canvas isn't ready.
+#[tauri::command]
+fn set_view_mode(
+    app: AppHandle,
+    state: State<'_, SharedSession>,
+    canvas: State<'_, CanvasState>,
+    mode: canvas::ViewMode,
+    layer: Option<celframe_core::LayerId>,
+) -> Result<Option<ViewInfo>, String> {
+    let info = {
+        let session = lock(&state)?;
+        let mut canvas = canvas.0.lock().map_err(|_| "the canvas is unavailable")?;
+        let Some(canvas) = canvas.as_mut() else {
+            return Ok(None);
+        };
+        canvas.set_mode(mode, layer);
+        let scene = session.project().scenes.first();
+        match (scene, canvas.layout()) {
+            (Some(scene), Some(layout)) => Some(view_info(canvas, scene, &layout)),
+            _ => None,
         }
     };
     redraw(&app);
@@ -632,7 +675,8 @@ pub fn run() {
             delete_selection,
             nudge_selection,
             edit_selection,
-            set_handles_visible
+            set_handles_visible,
+            set_view_mode
         ])
         .build(tauri::generate_context!())
         .expect("the app failed to start")

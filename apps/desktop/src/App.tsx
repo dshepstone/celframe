@@ -45,6 +45,8 @@ export function App() {
     timelineOpen,
     showPanel,
     resetLayout,
+    viewMode,
+    setViewMode,
     load,
     undo,
     redo,
@@ -184,6 +186,9 @@ export function App() {
           type: "arrange",
           to: up ? (all ? "front" : "forward") : all ? "back" : "backward",
         });
+      } else if (key === "1" || key === "2") {
+        event.preventDefault();
+        void setViewMode(key === "1" ? "drawing" : "camera");
       } else if (key === "a" && !isTextField(event.target)) {
         event.preventDefault();
         void selectAll();
@@ -206,6 +211,7 @@ export function App() {
     requestFileAction,
     selectAll,
     editSelection,
+    setViewMode,
   ]);
 
   return (
@@ -290,6 +296,17 @@ export function App() {
           <Menu
             label="View"
             items={[
+              {
+                label: "Drawing view",
+                shortcut: "Ctrl+1",
+                onSelect: () => void setViewMode("drawing"),
+              },
+              {
+                label: "Camera view",
+                shortcut: "Ctrl+2",
+                onSelect: () => void setViewMode("camera"),
+              },
+              "separator",
               {
                 label: "Zoom in",
                 shortcut: "+",
@@ -410,6 +427,29 @@ export function App() {
         <ToolRail />
         <DockArea area="left" />
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div
+            role="tablist"
+            aria-label="View"
+            className="flex h-7 shrink-0 items-stretch border-b border-border bg-surface-raised"
+          >
+            {(["drawing", "camera"] as const).map((mode, index) => (
+              <button
+                key={mode}
+                type="button"
+                role="tab"
+                aria-selected={viewMode === mode}
+                title={`${mode === "drawing" ? "Drawing" : "Camera"} view (Ctrl+${index + 1})`}
+                onClick={() => void setViewMode(mode)}
+                className={`px-3.5 text-2xs font-semibold tracking-[0.06em] uppercase outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus-ring ${
+                  viewMode === mode
+                    ? "bg-surface text-text shadow-[inset_0_2px_0_var(--color-accent)]"
+                    : "text-text-muted hover:text-text"
+                }`}
+              >
+                {mode === "drawing" ? "Drawing" : "Camera"}
+              </button>
+            ))}
+          </div>
           <main
             ref={canvasRef}
             aria-label="Canvas"

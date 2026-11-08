@@ -12,6 +12,7 @@ import {
   type RecoveryInfo,
   type ViewChange,
   type ViewInfo,
+  type ViewMode,
 } from "./backend";
 import {
   type Shelf,
@@ -175,6 +176,9 @@ export interface AppState {
   addLayer: () => Promise<void>;
   penOptions: () => PenOptions;
   setTool: (tool: Tool) => void;
+  /** Which centre view is showing. */
+  viewMode: ViewMode;
+  setViewMode: (mode: ViewMode) => Promise<void>;
   /** How dragging from empty space selects with the Select tool. */
   selectMode: "box" | "lasso";
   setSelectMode: (mode: "box" | "lasso") => void;
@@ -358,9 +362,14 @@ export const useApp = create<AppState>((set, get) => {
       }),
     setBrushColor: (brushColor) => set({ brushColor }),
     setActiveLayer: (activeLayer) => {
+      const changed = activeLayer !== get().activeLayer;
       // A selection belongs to one layer and part.
-      if (activeLayer !== get().activeLayer) void get().clearSelection();
+      if (changed) void get().clearSelection();
       set({ activeLayer });
+      // The Drawing view shows the chosen layer.
+      if (changed && get().viewMode === "drawing") {
+        void get().setViewMode("drawing");
+      }
     },
     runCommand: async (command) => {
       await sync(backend.executeCommand(command));
@@ -385,6 +394,16 @@ export const useApp = create<AppState>((set, get) => {
           .catch(() => undefined);
       }
       set({ tool });
+    },
+    viewMode: "camera",
+    setViewMode: async (viewMode) => {
+      set({ viewMode });
+      try {
+        const view = await backend.setViewMode(viewMode, get().activeLayer);
+        if (view) set({ view });
+      } catch {
+        // Outside the desktop app there is no native canvas to switch.
+      }
     },
     selectMode: "box",
     setSelectMode: (selectMode) => set({ selectMode }),
