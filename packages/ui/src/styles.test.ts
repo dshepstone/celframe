@@ -7,4 +7,10 @@ describe("styles.css", () => {
     // Without this, every class used only inside @celframe/ui is missing from the apps.
     expect(css).toMatch(/@source\s+"\.\/";/);
   });
+
+  it("leaves the page background transparent so the native canvas shows through", () => {
+    const css = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
+    const body = /\bbody\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+    expect(body).not.toMatch(/background\s*:/);
+  });
 });
