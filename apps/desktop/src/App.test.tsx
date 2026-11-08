@@ -341,6 +341,63 @@ describe("App shell", () => {
     vi.useRealTimers();
   });
 
+  it("times drawings by typing numbers into the exposure sheet", async () => {
+    const drawn = scene({
+      layers: [
+        layer("l1", {
+          name: "Layer 1",
+          drawings: [{ id: "d1", strokes: [] }],
+          exposures: [{ startFrame: 0, length: 2, drawing: "d1" }],
+        }),
+      ],
+    });
+    const at = (currentFrame: number) =>
+      view({
+        currentFrame,
+        sceneLength: 2,
+        project: { id: "p", name: "Bouncing ball", scenes: [drawn] },
+      });
+    vi.mocked(backend.getDocument).mockResolvedValue(at(0));
+    vi.mocked(backend.setCurrentFrame).mockImplementation((frame) =>
+      Promise.resolve(at(frame)),
+    );
+    // Like the core, timing edits keep the current frame.
+    vi.mocked(backend.editTiming).mockImplementation(() =>
+      Promise.resolve(at(useApp.getState().document?.currentFrame ?? 0)),
+    );
+    render(<App />);
+    await screen.findByText("Bouncing ball");
+    await userEvent.click(screen.getByRole("tab", { name: "Exposure sheet" }));
+    const sheet = within(
+      screen.getByRole("region", { name: "Exposure sheet" }),
+    );
+    // The fixture's layer shows drawing 1 from frame 1.
+    expect(
+      sheet.getByRole("cell", { name: "Layer 1, frame 1: drawing 1" }),
+    ).toBeTruthy();
+
+    const entry = sheet.getByRole("textbox", {
+      name: /Drawing number for Layer 1 at frame 1/,
+    });
+    await userEvent.type(entry, "2{Enter}");
+    expect(backend.editTiming).toHaveBeenLastCalledWith(
+      { type: "expose", number: 2 },
+      "l1",
+    );
+    await waitFor(() =>
+      expect(backend.setCurrentFrame).toHaveBeenLastCalledWith(1),
+    );
+
+    const moved = await sheet.findByRole("textbox", { name: /at frame 2/ });
+    await userEvent.type(moved, "{Delete}");
+    expect(backend.editTiming).toHaveBeenLastCalledWith(
+      { type: "clearFrame" },
+      "l1",
+    );
+    await userEvent.type(moved, "{ArrowUp}");
+    expect(backend.setCurrentFrame).toHaveBeenLastCalledWith(0);
+  });
+
   it("cancels a tab drag with Escape", async () => {
     render(<App />);
     await screen.findByText("Bouncing ball");

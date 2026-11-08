@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { ColourPanel } from "../studio/ColourPanel";
+import { ExposureSheet } from "../studio/ExposureSheet";
 import { LayersPanel } from "../studio/LayersPanel";
 import { Timeline } from "../studio/Timeline";
 import { ToolProperties } from "../studio/ToolProperties";
@@ -14,4 +15,5 @@ export const PANEL_INFO: Record<
   colour: { title: "Colour", render: () => <ColourPanel /> },
   layers: { title: "Layers", render: () => <LayersPanel /> },
   timeline: { title: "Timeline", render: () => <Timeline /> },
+  xsheet: { title: "Exposure sheet", render: () => <ExposureSheet /> },
 };

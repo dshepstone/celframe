@@ -16,7 +16,7 @@ describe("dock layout", () => {
   it("starts with the default arrangement", () => {
     const layout = defaultLayout();
     expect(tabs(layout, "right")).toEqual([["tool"], ["colour"], ["layers"]]);
-    expect(tabs(layout, "bottom")).toEqual([["timeline"]]);
+    expect(tabs(layout, "bottom")).toEqual([["timeline", "xsheet"]]);
     expect(tabs(layout, "left")).toEqual([]);
   });
 
@@ -63,7 +63,8 @@ describe("dock layout", () => {
     ]);
     expect(layout.areas.right[0]?.weight).toBeCloseTo(0.7);
     expect(layout.areas.right[1]?.weight).toBeCloseTo(0.7);
-    expect(tabs(layout, "bottom")).toEqual([]);
+    // The rest of its stack stays.
+    expect(tabs(layout, "bottom")).toEqual([["xsheet"]]);
   });
 
   it("opens an empty area", () => {
@@ -134,8 +135,21 @@ describe("dock layout", () => {
     expect(tabs(layout, "left")).toEqual([["layers"]]);
     expect(layout.areas.left[0]?.weight).toBe(1);
     expect(layout.areas.right[0]?.active).toBe("colour");
-    expect(tabs(layout, "bottom")).toEqual([]);
+    // Panels missing from what was stored go back to their default places.
+    expect(tabs(layout, "bottom")).toEqual([["timeline", "xsheet"]]);
     expect(layout.sizes.left).toBe(520);
     expect(layout.sizes.right).toBe(272);
+  });
+
+  it("adds panels a stored layout doesn't know about beside their default neighbours", () => {
+    const stored = JSON.stringify({
+      areas: {
+        right: [{ id: "r", tabs: ["tool", "colour", "layers"] }],
+        bottom: [{ id: "b", tabs: ["timeline"], active: "timeline" }],
+      },
+    });
+    const layout = parseLayout(stored);
+    expect(tabs(layout, "bottom")).toEqual([["timeline", "xsheet"]]);
+    expect(layout.areas.bottom[0]?.active).toBe("timeline");
   });
 });

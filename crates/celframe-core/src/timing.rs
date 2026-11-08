@@ -57,6 +57,65 @@ pub fn with_new_drawing(exposures: &[Exposure], frame: u32, drawing: DrawingId) 
     out
 }
 
+/// Exposes `drawing` from `frame`, as typing its number into an exposure sheet does. Inside a
+/// hold, the hold ends just before the frame and the drawing holds for the rest of it; on an
+/// empty frame it lasts one frame.
+pub fn expose(exposures: &[Exposure], frame: u32, drawing: DrawingId) -> Option<Vec<Exposure>> {
+    let mut out = Vec::with_capacity(exposures.len() + 1);
+    match covering(exposures, frame) {
+        Some(index) => {
+            let e = exposures[index];
+            if e.drawing == drawing && e.start_frame == frame {
+                return None;
+            }
+            for (i, other) in exposures.iter().enumerate() {
+                if i != index {
+                    out.push(*other);
+                } else if e.start_frame < frame {
+                    out.push(Exposure::new(
+                        e.start_frame,
+                        frame - e.start_frame,
+                        e.drawing,
+                    ));
+                    out.push(Exposure::new(frame, end(&e) - frame, drawing));
+                } else {
+                    out.push(Exposure::new(frame, e.length, drawing));
+                }
+            }
+        }
+        None => {
+            out.extend_from_slice(exposures);
+            out.push(Exposure::new(frame, 1, drawing));
+            out.sort_by_key(|e| e.start_frame);
+        }
+    }
+    changed(exposures, out)
+}
+
+/// Empties one frame without moving anything: a hold across it keeps its frames on either side.
+pub fn clear_frame(exposures: &[Exposure], frame: u32) -> Option<Vec<Exposure>> {
+    let index = covering(exposures, frame)?;
+    let e = exposures[index];
+    let mut out = Vec::with_capacity(exposures.len() + 1);
+    for (i, other) in exposures.iter().enumerate() {
+        if i != index {
+            out.push(*other);
+            continue;
+        }
+        if e.start_frame < frame {
+            out.push(Exposure::new(
+                e.start_frame,
+                frame - e.start_frame,
+                e.drawing,
+            ));
+        }
+        if frame + 1 < end(&e) {
+            out.push(Exposure::new(frame + 1, end(&e) - frame - 1, e.drawing));
+        }
+    }
+    changed(exposures, out)
+}
+
 /// Lengthens or shortens the exposure at `frame` by `by` frames, moving later exposures with
 /// it. Never shortens below one frame.
 pub fn hold(exposures: &[Exposure], frame: u32, by: i64) -> Option<Vec<Exposure>> {
