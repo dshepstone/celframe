@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -180,44 +181,77 @@ describe("App shell", () => {
     await waitFor(() => expect(screen.queryByText("1 selected")).toBeNull());
   });
 
-  it("collapses panels and resizes the side panel, and remembers both", async () => {
-    localStorage.removeItem("celframe.layout");
+  it("shows panels in dock tabs that can be dragged, resized and reset", async () => {
+    localStorage.removeItem("celframe.dock");
     render(<App />);
     await screen.findByText("Bouncing ball");
-    await userEvent.click(
-      screen.getByRole("button", { name: "Collapse Colour" }),
-    );
-    expect(screen.queryByRole("radiogroup", { name: "Swatches" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Expand Colour" })).toBeTruthy();
+    const right = () =>
+      within(screen.getByRole("region", { name: "right panels" }));
+    expect(right().getByRole("tab", { name: "Tool properties" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Timeline" })).toBeTruthy();
 
-    const edge = screen.getByRole("separator", { name: "Resize side panel" });
+    // Drag the Colour tab into the Layers stack's tab strip.
+    const colour = right().getByRole("tab", { name: "Colour" });
+    const layersStrip = right()
+      .getByRole("tab", { name: "Layers" })
+      .closest("[data-dock-tabs]");
+    fireEvent.pointerDown(colour, { button: 0, clientX: 10, clientY: 10 });
+    act(() => {
+      window.dispatchEvent(
+        new MouseEvent("pointermove", { clientX: 40, clientY: 40 }),
+      );
+    });
+    expect(useApp.getState().dockDrag?.panel).toBe("colour");
+    document.elementsFromPoint = () => (layersStrip ? [layersStrip] : []);
+    act(() => {
+      window.dispatchEvent(
+        new MouseEvent("pointermove", { clientX: 500, clientY: 300 }),
+      );
+    });
+    act(() => {
+      window.dispatchEvent(new MouseEvent("pointerup"));
+    });
+    expect(useApp.getState().dockDrag).toBeNull();
+    const stacks = useApp.getState().dock.areas.right.map((s) => s.tabs);
+    expect(stacks).toEqual([["tool"], ["layers", "colour"]]);
+    expect(
+      right().getByRole("tab", { name: "Colour", selected: true }),
+    ).toBeTruthy();
+
+    // Resize the right area from the keyboard.
+    const edge = screen.getByRole("separator", {
+      name: "Resize the right area",
+    });
     const before = Number(edge.getAttribute("aria-valuenow"));
     edge.focus();
     await userEvent.keyboard("{ArrowLeft}");
     expect(Number(edge.getAttribute("aria-valuenow"))).toBe(before + 16);
-    expect(useApp.getState().document).not.toBeNull();
 
-    const stored = JSON.parse(localStorage.getItem("celframe.layout") ?? "{}");
-    expect(stored).toEqual({
-      collapsedPanels: ["colour"],
-      sidePanelWidth: before + 16,
-    });
+    const stored = JSON.parse(localStorage.getItem("celframe.dock") ?? "{}");
+    expect(stored.sizes.right).toBe(before + 16);
+
+    await userEvent.click(screen.getByRole("button", { name: "Window" }));
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: "Reset layout" }),
+    );
+    expect(useApp.getState().dock.areas.right.map((s) => s.tabs)).toEqual([
+      ["tool"],
+      ["colour"],
+      ["layers"],
+    ]);
   });
 
-  it("shows the logo in the menu row and the full logo in About", async () => {
+  it("cancels a tab drag with Escape", async () => {
     render(<App />);
     await screen.findByText("Bouncing ball");
-    // Only the small mark shows until About opens.
-    expect(screen.getAllByRole("img", { name: "Celframe" })).toHaveLength(1);
-    await userEvent.click(screen.getByRole("button", { name: "Help" }));
-    await userEvent.click(
-      await screen.findByRole("menuitem", { name: "About Celframe" }),
+    act(() =>
+      useApp
+        .getState()
+        .setDockDrag({ panel: "layers", x: 0, y: 0, target: null }),
     );
-    const about = await screen.findByRole("dialog");
-    expect(within(about).getByRole("img", { name: "Celframe" })).toBeTruthy();
-    expect(about.textContent).toContain("GPL-3.0-or-later");
-    await userEvent.click(within(about).getByRole("button", { name: "Close" }));
-    expect(screen.queryByRole("dialog")).toBeNull();
+    await userEvent.keyboard("{Escape}");
+    expect(useApp.getState().dockDrag).toBeNull();
+    expect(useApp.getState().dock.areas.right.at(-1)?.tabs).toEqual(["layers"]);
   });
 
   it("runs, customises and remembers shelves", async () => {

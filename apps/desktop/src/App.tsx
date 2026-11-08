@@ -3,17 +3,16 @@ import { useEffect, useState } from "react";
 import { backend } from "./backend";
 import { CommandPalette } from "./CommandPalette";
 import { RecoveryDialog } from "./RecoveryDialog";
+import { DockArea } from "./dock/DockArea";
+import { DockDragLayer } from "./dock/DockDragLayer";
+import { PANELS } from "./dock/layout";
+import { PANEL_INFO } from "./dock/panels";
 import { useApp } from "./store";
-import { ColourPanel } from "./studio/ColourPanel";
 import { RedoIcon, SearchIcon, UndoIcon } from "./studio/icons";
-import { SidePanelResizer } from "./studio/SidePanelResizer";
 import { AboutDialog } from "./studio/AboutDialog";
 import { LogoTile } from "./studio/brand";
-import { LayersPanel } from "./studio/LayersPanel";
 import { ShelfBar } from "./studio/ShelfBar";
-import { ToolProperties } from "./studio/ToolProperties";
 import { StatusBar } from "./studio/StatusBar";
-import { Timeline } from "./studio/Timeline";
 import { ToolRail } from "./studio/ToolRail";
 import { UnsavedChangesDialog } from "./UnsavedChangesDialog";
 import { useNativeCanvas } from "./useNativeCanvas";
@@ -43,8 +42,9 @@ export function App() {
     error,
     theme,
     sidePanelOpen,
-    sidePanelWidth,
     timelineOpen,
+    showPanel,
+    resetLayout,
     load,
     undo,
     redo,
@@ -334,6 +334,17 @@ export function App() {
             ]}
           />
           <Menu
+            label="Window"
+            items={[
+              ...PANELS.map((panel) => ({
+                label: PANEL_INFO[panel].title,
+                onSelect: () => showPanel(panel),
+              })),
+              "separator" as const,
+              { label: "Reset layout", onSelect: resetLayout },
+            ]}
+          />
+          <Menu
             label="Help"
             items={[
               {
@@ -397,45 +408,30 @@ export function App() {
 
       <div className="flex min-h-0 flex-1">
         <ToolRail />
-        <main
-          ref={canvasRef}
-          aria-label="Canvas"
-          data-native-canvas={nativeCanvas}
-          className={`flex flex-1 touch-none items-center justify-center ${
-            nativeCanvas
-              ? `bg-transparent ${
-                  spaceHeld || tool === "hand"
-                    ? "cursor-grab"
-                    : tool === "zoom"
-                      ? "cursor-zoom-in"
-                      : tool === "eraser"
-                        ? "cursor-cell"
-                        : "cursor-crosshair"
-                }`
-              : "bg-canvas-backdrop"
-          }`}
-        />
-        {sidePanelOpen ? (
-          <aside
-            aria-label="Side panels"
-            style={{ width: sidePanelWidth }}
-            className="relative flex shrink-0 flex-col border-l border-border bg-surface"
-          >
-            <SidePanelResizer />
-            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-              <ToolProperties />
-              <ColourPanel />
-              <LayersPanel />
-            </div>
-          </aside>
-        ) : null}
-      </div>
-
-      {timelineOpen ? (
-        <div className="h-40 shrink-0 border-t border-border">
-          <Timeline />
+        <DockArea area="left" />
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <main
+            ref={canvasRef}
+            aria-label="Canvas"
+            data-native-canvas={nativeCanvas}
+            className={`flex flex-1 touch-none items-center justify-center ${
+              nativeCanvas
+                ? `bg-transparent ${
+                    spaceHeld || tool === "hand"
+                      ? "cursor-grab"
+                      : tool === "zoom"
+                        ? "cursor-zoom-in"
+                        : tool === "eraser"
+                          ? "cursor-cell"
+                          : "cursor-crosshair"
+                  }`
+                : "bg-canvas-backdrop"
+            }`}
+          />
+          {timelineOpen ? <DockArea area="bottom" /> : null}
         </div>
-      ) : null}
+        {sidePanelOpen ? <DockArea area="right" /> : null}
+      </div>
 
       {error ? (
         <div
@@ -447,6 +443,7 @@ export function App() {
       ) : null}
       <StatusBar />
       <CommandPalette />
+      <DockDragLayer />
       <AboutDialog open={aboutOpen} onOpenChange={setAboutOpen} />
       <UnsavedChangesDialog />
       <RecoveryDialog />

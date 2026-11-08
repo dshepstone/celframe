@@ -28,9 +28,6 @@ export function Timeline() {
       className="flex h-full min-h-0 flex-col bg-surface"
     >
       <header className="flex h-[26px] shrink-0 items-center gap-3 border-b border-border bg-surface-raised px-2.5 text-xs">
-        <h2 className="text-2xs font-semibold tracking-[0.06em] text-text-muted uppercase">
-          Timeline
-        </h2>
         <span className="text-text-muted">
           Frame 1 of {frames} · {scene.frameRate} fps · Playback and timing
           tools arrive in Phase 3
