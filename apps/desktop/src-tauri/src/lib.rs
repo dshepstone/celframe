@@ -68,7 +68,11 @@ fn redraw(app: &AppHandle) {
         let strokes = canvas::view_strokes(scene, mode, layer, frame);
         // Onion skin draws under the current drawing.
         let onion = canvas::onion_strokes(scene, layer, frame, &canvas.onion());
-        canvas.render(scene, onion.iter().chain(strokes), &overlay);
+        canvas.render(
+            scene,
+            onion.iter().chain(strokes.iter().map(|s| &**s)),
+            &overlay,
+        );
     }
 }
 

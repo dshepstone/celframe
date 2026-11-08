@@ -1,5 +1,6 @@
 //! Document model, commands and undo/redo.
 
+mod animated;
 mod command;
 mod history;
 mod ids;
@@ -7,7 +8,8 @@ mod model;
 mod schema;
 pub mod timing;
 
-pub use command::{Command, CommandError};
+pub use animated::{Animated, Interpolation, Key};
+pub use command::{Command, CommandError, LayerProperty};
 pub use history::History;
 pub use ids::{DrawingId, LayerId, ProjectId, SceneId, StrokeId};
 pub use model::{

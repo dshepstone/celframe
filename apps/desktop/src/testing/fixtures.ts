@@ -8,6 +8,7 @@ export function layer(id: string, overrides: Partial<Layer> = {}): Layer {
     locked: false,
     drawings: [],
     exposures: [],
+    opacity: { value: 1, keys: [] },
     ...overrides,
   };
 }

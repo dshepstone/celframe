@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::animated::{Animated, Key};
 use crate::ids::{DrawingId, LayerId, SceneId, StrokeId};
 use crate::model::{Drawing, Exposure, ExposureError, Layer, Project, Scene, Stroke, StrokeSample};
 
@@ -108,6 +109,48 @@ pub enum Command {
     Batch {
         commands: Vec<Command>,
     },
+    /// Adds a key, or replaces the key at the same frame.
+    SetKey {
+        scene: SceneId,
+        layer: LayerId,
+        property: LayerProperty,
+        key: Key,
+    },
+    RemoveKey {
+        scene: SceneId,
+        layer: LayerId,
+        property: LayerProperty,
+        frame: u32,
+    },
+    /// Changes the value used while there are no keys.
+    SetBaseValue {
+        scene: SceneId,
+        layer: LayerId,
+        property: LayerProperty,
+        value: f64,
+    },
+}
+
+/// A keyable value on a layer. See `docs/specs/keyframes.md`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum LayerProperty {
+    Opacity,
+}
+
+impl LayerProperty {
+    /// The values this property accepts.
+    pub fn range(self) -> std::ops::RangeInclusive<f64> {
+        match self {
+            Self::Opacity => 0.0..=1.0,
+        }
+    }
+
+    fn of(self, layer: &mut Layer) -> &mut Animated {
+        match self {
+            Self::Opacity => &mut layer.opacity,
+        }
+    }
 }
 
 impl Command {
@@ -333,6 +376,65 @@ impl Command {
                     len,
                 })
             }
+            Command::SetKey {
+                scene,
+                layer,
+                property,
+                key,
+            } => {
+                if !key.value.is_finite() || !property.range().contains(&key.value) {
+                    return Err(CommandError::InvalidValue);
+                }
+                let frame = key.frame;
+                let value = property.of(find_layer(project, scene, layer)?);
+                Ok(match value.set_key(key) {
+                    Some(old) => Command::SetKey {
+                        scene,
+                        layer,
+                        property,
+                        key: old,
+                    },
+                    None => Command::RemoveKey {
+                        scene,
+                        layer,
+                        property,
+                        frame,
+                    },
+                })
+            }
+            Command::RemoveKey {
+                scene,
+                layer,
+                property,
+                frame,
+            } => {
+                let value = property.of(find_layer(project, scene, layer)?);
+                let key = value.remove_key(frame).ok_or(CommandError::NotFound)?;
+                Ok(Command::SetKey {
+                    scene,
+                    layer,
+                    property,
+                    key,
+                })
+            }
+            Command::SetBaseValue {
+                scene,
+                layer,
+                property,
+                value,
+            } => {
+                if !value.is_finite() || !property.range().contains(&value) {
+                    return Err(CommandError::InvalidValue);
+                }
+                let target = property.of(find_layer(project, scene, layer)?);
+                let value = std::mem::replace(&mut target.value, value);
+                Ok(Command::SetBaseValue {
+                    scene,
+                    layer,
+                    property,
+                    value,
+                })
+            }
             Command::Batch { commands } => {
                 let mut inverses = Vec::with_capacity(commands.len());
                 for command in commands {
@@ -440,6 +542,8 @@ pub enum CommandError {
     InvalidIndex,
     LastScene,
     DrawingInUse,
+    /// A value outside what the property accepts.
+    InvalidValue,
     Exposure(ExposureError),
 }
 
@@ -451,6 +555,7 @@ impl std::fmt::Display for CommandError {
             Self::InvalidIndex => f.write_str("the position is out of range"),
             Self::LastScene => f.write_str("a project must keep at least one scene"),
             Self::DrawingInUse => f.write_str("the drawing is still used by an exposure"),
+            Self::InvalidValue => f.write_str("that value is out of range"),
             Self::Exposure(error) => error.fmt(f),
         }
     }

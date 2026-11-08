@@ -32,6 +32,17 @@ fn sample_project() -> Project {
     let id = drawing.id;
     layer.drawings.push(drawing);
     layer.insert_exposure(Exposure::new(3, 2, id)).unwrap();
+    // Keys with values that need exact floats to come back unchanged.
+    layer.opacity.set_key(celframe_core::Key {
+        frame: 2,
+        value: 0.1 + 0.2,
+        interpolation: celframe_core::Interpolation::Step,
+    });
+    layer.opacity.set_key(celframe_core::Key {
+        frame: 9,
+        value: 1.0 / 3.0,
+        interpolation: celframe_core::Interpolation::Linear,
+    });
     project.scenes[0].layers.push(Layer::new("Top"));
     project
 }

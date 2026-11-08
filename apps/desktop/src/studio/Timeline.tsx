@@ -1,6 +1,7 @@
-import type { MouseEvent, ReactNode } from "react";
+import { Fragment, type MouseEvent, type ReactNode } from "react";
 import type { Layer, TimingEdit } from "../backend";
 import { targetLayer, useApp } from "../store";
+import { KeyRow } from "./KeyRow";
 import { startScrub } from "./scrub";
 
 const CELL = 22;
@@ -252,23 +253,29 @@ export function Timeline() {
           </thead>
           <tbody>
             {layers.map((layer) => (
-              <tr
-                key={layer.id}
-                className={layer.id === target?.id ? "bg-accent-muted/60" : ""}
-              >
-                <th
-                  scope="row"
-                  onClick={() => setActiveLayer(layer.id)}
-                  className={`sticky left-0 z-10 h-[26px] cursor-pointer truncate border-t border-r border-border px-2 text-left font-normal ${
-                    layer.id === target?.id
-                      ? "bg-accent-muted text-text"
-                      : "bg-surface text-text-muted"
-                  } ${layer.visible ? "" : "line-through"}`}
+              <Fragment key={layer.id}>
+                <tr
+                  className={
+                    layer.id === target?.id ? "bg-accent-muted/60" : ""
+                  }
                 >
-                  {layer.name}
-                </th>
-                <ExposureCells layer={layer} frames={frames} pick={pick} />
-              </tr>
+                  <th
+                    scope="row"
+                    onClick={() => setActiveLayer(layer.id)}
+                    className={`sticky left-0 z-10 h-[26px] cursor-pointer truncate border-t border-r border-border px-2 text-left font-normal ${
+                      layer.id === target?.id
+                        ? "bg-accent-muted text-text"
+                        : "bg-surface text-text-muted"
+                    } ${layer.visible ? "" : "line-through"}`}
+                  >
+                    {layer.name}
+                  </th>
+                  <ExposureCells layer={layer} frames={frames} pick={pick} />
+                </tr>
+                {layer.opacity.keys.length > 0 ? (
+                  <KeyRow scene={scene.id} layer={layer} frames={frames} />
+                ) : null}
+              </Fragment>
             ))}
           </tbody>
         </table>

@@ -236,3 +236,62 @@ fn a_failing_batch_leaves_the_project_unchanged() {
     assert_eq!(command.apply(&mut project), Err(CommandError::NotFound));
     assert_eq!(project, f.project);
 }
+
+fn opacity_key(frame: u32, value: f64) -> celframe_core::Key {
+    celframe_core::Key {
+        frame,
+        value,
+        interpolation: celframe_core::Interpolation::Ease,
+    }
+}
+
+reversible!(set_key, f => Command::SetKey { scene: f.scene, layer: f.layer, property: celframe_core::LayerProperty::Opacity, key: opacity_key(3, 0.5) });
+reversible!(set_base_value, f => Command::SetBaseValue { scene: f.scene, layer: f.layer, property: celframe_core::LayerProperty::Opacity, value: 0.25 });
+
+#[test]
+fn replacing_and_removing_keys_reverse_exactly() {
+    let f = fixture();
+    let mut project = f.project.clone();
+    let add = |frame, value| Command::SetKey {
+        scene: f.scene,
+        layer: f.layer,
+        property: celframe_core::LayerProperty::Opacity,
+        key: opacity_key(frame, value),
+    };
+    add(3, 0.5).apply(&mut project).unwrap();
+    assert_reversible(project.clone(), add(3, 0.9));
+    assert_reversible(
+        project,
+        Command::RemoveKey {
+            scene: f.scene,
+            layer: f.layer,
+            property: celframe_core::LayerProperty::Opacity,
+            frame: 3,
+        },
+    );
+}
+
+#[test]
+fn opacity_outside_0_to_1_is_refused() {
+    let f = fixture();
+    assert_rejected(
+        f.project.clone(),
+        Command::SetBaseValue {
+            scene: f.scene,
+            layer: f.layer,
+            property: celframe_core::LayerProperty::Opacity,
+            value: 1.5,
+        },
+        CommandError::InvalidValue,
+    );
+    assert_rejected(
+        f.project,
+        Command::SetKey {
+            scene: f.scene,
+            layer: f.layer,
+            property: celframe_core::LayerProperty::Opacity,
+            key: opacity_key(0, f64::NAN),
+        },
+        CommandError::InvalidValue,
+    );
+}
