@@ -13,14 +13,15 @@ Frames are numbered from 1 in the interface; the document stores them from 0.
 
 ## Moving through frames
 
-| Action         | Shortcut      | Elsewhere                                  |
-| -------------- | ------------- | ------------------------------------------ |
-| Previous frame | `Alt+←`       | Timeline transport                         |
-| Next frame     | `Alt+→`       | Timeline transport                         |
-| First frame    | `Home`        | Timeline transport                         |
-| Last frame     | `End`         | Timeline transport: the scene's last frame |
-| Go to a frame  | —             | Click a frame number in the timeline       |
-| Play or stop   | `Shift+Space` | Timeline transport                         |
+| Action         | Shortcut      | Elsewhere                                                             |
+| -------------- | ------------- | --------------------------------------------------------------------- |
+| Previous frame | `Alt+←`       | Timeline transport                                                    |
+| Next frame     | `Alt+→`       | Timeline transport                                                    |
+| First frame    | `Home`        | Timeline transport                                                    |
+| Last frame     | `End`         | Timeline transport: the scene's last frame                            |
+| Go to a frame  | —             | Click a frame number in the timeline                                  |
+| Scrub          | —             | Drag along the timeline's frame numbers, or down the exposure sheet's |
+| Play or stop   | `Shift+Space` | Timeline transport                                                    |
 
 - Playback runs at the scene's frame rate from the current frame. With **Loop** on (the default) it wraps from the last frame to the first; with Loop off it stops on the last frame.
 - Any edit, or choosing a tool on the canvas, stops playback.

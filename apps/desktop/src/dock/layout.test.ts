@@ -15,8 +15,12 @@ const tabs = (layout: DockLayout, area: "left" | "right" | "bottom") =>
 describe("dock layout", () => {
   it("starts with the default arrangement", () => {
     const layout = defaultLayout();
-    expect(tabs(layout, "right")).toEqual([["tool"], ["colour"], ["layers"]]);
-    expect(tabs(layout, "bottom")).toEqual([["timeline", "xsheet"]]);
+    expect(tabs(layout, "right")).toEqual([
+      ["tool"],
+      ["colour"],
+      ["layers", "xsheet"],
+    ]);
+    expect(tabs(layout, "bottom")).toEqual([["timeline"]]);
     expect(tabs(layout, "left")).toEqual([]);
   });
 
@@ -27,7 +31,10 @@ describe("dock layout", () => {
       stack: "right-layers",
       index: 0,
     });
-    expect(tabs(layout, "right")).toEqual([["tool"], ["colour", "layers"]]);
+    expect(tabs(layout, "right")).toEqual([
+      ["tool"],
+      ["colour", "layers", "xsheet"],
+    ]);
     expect(findPanel(layout, "colour")?.stack.active).toBe("colour");
   });
 
@@ -38,14 +45,14 @@ describe("dock layout", () => {
       stack: "right-layers",
       index: 1,
     });
-    expect(tabs(layout, "right")[1]).toEqual(["layers", "colour"]);
+    expect(tabs(layout, "right")[1]).toEqual(["layers", "colour", "xsheet"]);
     layout = moveTab(layout, "layers", {
       kind: "tabs",
       area: "right",
       stack: "right-layers",
       index: 2,
     });
-    expect(tabs(layout, "right")[1]).toEqual(["colour", "layers"]);
+    expect(tabs(layout, "right")[1]).toEqual(["colour", "layers", "xsheet"]);
   });
 
   it("splits a stack, sharing its space", () => {
@@ -59,12 +66,11 @@ describe("dock layout", () => {
       ["tool"],
       ["timeline"],
       ["colour"],
-      ["layers"],
+      ["layers", "xsheet"],
     ]);
     expect(layout.areas.right[0]?.weight).toBeCloseTo(0.7);
     expect(layout.areas.right[1]?.weight).toBeCloseTo(0.7);
-    // The rest of its stack stays.
-    expect(tabs(layout, "bottom")).toEqual([["xsheet"]]);
+    expect(tabs(layout, "bottom")).toEqual([]);
   });
 
   it("opens an empty area", () => {
@@ -132,24 +138,51 @@ describe("dock layout", () => {
       sizes: { left: 9999, right: "wide" },
     });
     const layout = parseLayout(stored);
-    expect(tabs(layout, "left")).toEqual([["layers"]]);
+    // The exposure sheet, missing from what was stored, joins its default neighbour.
+    expect(tabs(layout, "left")).toEqual([["layers", "xsheet"]]);
     expect(layout.areas.left[0]?.weight).toBe(1);
     expect(layout.areas.right[0]?.active).toBe("colour");
     // Panels missing from what was stored go back to their default places.
-    expect(tabs(layout, "bottom")).toEqual([["timeline", "xsheet"]]);
+    expect(tabs(layout, "bottom")).toEqual([["timeline"]]);
     expect(layout.sizes.left).toBe(520);
     expect(layout.sizes.right).toBe(272);
   });
 
   it("adds panels a stored layout doesn't know about beside their default neighbours", () => {
     const stored = JSON.stringify({
+      version: 2,
       areas: {
-        right: [{ id: "r", tabs: ["tool", "colour", "layers"] }],
-        bottom: [{ id: "b", tabs: ["timeline"], active: "timeline" }],
+        right: [
+          { id: "r", tabs: ["tool", "colour", "layers"], active: "tool" },
+        ],
+        bottom: [{ id: "b", tabs: ["timeline"] }],
       },
     });
     const layout = parseLayout(stored);
-    expect(tabs(layout, "bottom")).toEqual([["timeline", "xsheet"]]);
-    expect(layout.areas.bottom[0]?.active).toBe("timeline");
+    expect(tabs(layout, "right")).toEqual([
+      ["tool", "colour", "layers", "xsheet"],
+    ]);
+    expect(layout.areas.right[0]?.active).toBe("tool");
+  });
+
+  it("moves the exposure sheet out of layouts stored before it moved", () => {
+    const stored = JSON.stringify({
+      areas: {
+        right: [
+          { id: "r", tabs: ["tool"] },
+          { id: "c", tabs: ["colour"] },
+          { id: "l", tabs: ["layers"] },
+        ],
+        bottom: [{ id: "b", tabs: ["timeline", "xsheet"], active: "xsheet" }],
+      },
+    });
+    const layout = parseLayout(stored);
+    expect(tabs(layout, "right")).toEqual([
+      ["tool"],
+      ["colour"],
+      ["layers", "xsheet"],
+    ]);
+    expect(tabs(layout, "bottom")).toEqual([["timeline"]]);
+    expect(layout.version).toBe(2);
   });
 });

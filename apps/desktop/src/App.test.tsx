@@ -216,7 +216,7 @@ describe("App shell", () => {
     });
     expect(useApp.getState().dockDrag).toBeNull();
     const stacks = useApp.getState().dock.areas.right.map((s) => s.tabs);
-    expect(stacks).toEqual([["tool"], ["layers", "colour"]]);
+    expect(stacks).toEqual([["tool"], ["layers", "xsheet", "colour"]]);
     expect(
       right().getByRole("tab", { name: "Colour", selected: true }),
     ).toBeTruthy();
@@ -240,7 +240,7 @@ describe("App shell", () => {
     expect(useApp.getState().dock.areas.right.map((s) => s.tabs)).toEqual([
       ["tool"],
       ["colour"],
-      ["layers"],
+      ["layers", "xsheet"],
     ]);
   });
 
@@ -398,6 +398,58 @@ describe("App shell", () => {
     expect(backend.setCurrentFrame).toHaveBeenLastCalledWith(0);
   });
 
+  it("scrubs through frames by dragging along the frame numbers", async () => {
+    const at = (currentFrame: number) =>
+      view({ currentFrame, sceneLength: 12 });
+    vi.mocked(backend.getDocument).mockResolvedValue(at(0));
+    vi.mocked(backend.setCurrentFrame).mockImplementation((frame) =>
+      Promise.resolve(at(frame)),
+    );
+    render(<App />);
+    await screen.findByText("Bouncing ball");
+    const timeline = within(screen.getByRole("region", { name: "Timeline" }));
+    const header = (frame: number) =>
+      timeline
+        .getByRole("button", { name: `Go to frame ${frame + 1}` })
+        .closest("th");
+    fireEvent.pointerDown(header(2) as Element, { button: 0 });
+    expect(backend.setCurrentFrame).toHaveBeenLastCalledWith(2);
+    // The pointer moves over frame 7's number.
+    document.elementsFromPoint = () => [header(6) as Element];
+    act(() => {
+      window.dispatchEvent(
+        new MouseEvent("pointermove", { clientX: 200, clientY: 5 }),
+      );
+    });
+    expect(backend.setCurrentFrame).toHaveBeenLastCalledWith(6);
+    act(() => {
+      window.dispatchEvent(new MouseEvent("pointerup"));
+    });
+    act(() => {
+      window.dispatchEvent(
+        new MouseEvent("pointermove", { clientX: 300, clientY: 5 }),
+      );
+    });
+    expect(vi.mocked(backend.setCurrentFrame).mock.calls).toHaveLength(2);
+  });
+
+  it("shows and hides layers from the exposure sheet's columns", async () => {
+    vi.mocked(backend.executeCommand).mockResolvedValue(view());
+    render(<App />);
+    await screen.findByText("Bouncing ball");
+    await userEvent.click(screen.getByRole("tab", { name: "Exposure sheet" }));
+    const sheet = within(
+      screen.getByRole("region", { name: "Exposure sheet" }),
+    );
+    await userEvent.click(sheet.getByRole("button", { name: "Hide Layer 1" }));
+    expect(backend.executeCommand).toHaveBeenCalledWith({
+      type: "setLayerVisible",
+      scene: "s",
+      layer: "l1",
+      visible: false,
+    });
+  });
+
   it("cancels a tab drag with Escape", async () => {
     render(<App />);
     await screen.findByText("Bouncing ball");
@@ -408,7 +460,10 @@ describe("App shell", () => {
     );
     await userEvent.keyboard("{Escape}");
     expect(useApp.getState().dockDrag).toBeNull();
-    expect(useApp.getState().dock.areas.right.at(-1)?.tabs).toEqual(["layers"]);
+    expect(useApp.getState().dock.areas.right.at(-1)?.tabs).toEqual([
+      "layers",
+      "xsheet",
+    ]);
   });
 
   it("runs, customises and remembers shelves", async () => {

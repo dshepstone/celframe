@@ -4,8 +4,10 @@ A sheet of **rows for frames and columns for layers**, the traditional way to pl
 
 ## Layout
 
-- The sheet is a dock panel, **Exposure sheet**, opened by default as a tab beside the Timeline. Like any panel it can be dragged anywhere (see [docking](docking.md)).
-- The first column is the **frame number**. Then there's one column per layer, top layer first, matching the Layers panel. Hidden layers' columns are dimmed.
+- The sheet is a dock panel, **Exposure sheet**, opened by default as a tab beside Layers in the right panels. Like any panel it can be dragged anywhere (see [docking](docking.md)).
+- The first column is the **frame number**. Then there's one column per layer, top layer first, matching the Layers panel, so many layers can be timed side by side.
+- Each column's heading has an eye that shows or hides that layer, as in the Layers panel. Hidden layers' columns are dimmed.
+- The cells are white with dark ink, like a paper sheet, in both themes.
 - Rows run from frame 1 to 24 frames past the scene's end, or past the current frame if that's later.
 - Every 12th row is ruled with a lighter line and every 24th row with a heavier one, so seconds and half-seconds stand out at the scene's usual frame rates.
 - The **current frame's row** is highlighted, and the **current cell** (current layer at the current frame) has an accent outline.
@@ -19,6 +21,7 @@ A sheet of **rows for frames and columns for layers**, the traditional way to pl
 ## Moving
 
 - Clicking a cell makes its layer current and its frame current. Clicking a frame number only changes the frame.
+- **Scrubbing:** pressing on a frame number and dragging up or down moves the current frame with the pointer, so the drawings can be flipped through.
 - With the sheet focused, the arrow keys move the current cell: up and down change the frame, left and right change the layer.
 
 ## Editing
