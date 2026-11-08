@@ -12,15 +12,16 @@ Every panel lives in a **tab**, and tabs live in **dock areas** around the canva
 
 ## Panels
 
-| Panel           | Default place        |
-| --------------- | -------------------- |
-| Tool properties | Right, top stack     |
-| Colour          | Right, middle stack  |
-| Layers          | Right, bottom stack  |
-| Exposure sheet  | Right, beside Layers |
-| Timeline        | Bottom               |
+| Panel           | Default place                 |
+| --------------- | ----------------------------- |
+| Tool properties | Right, top stack              |
+| Camera          | Right, beside Tool properties |
+| Colour          | Right, middle stack           |
+| Layers          | Right, bottom stack           |
+| Exposure sheet  | Right, beside Layers          |
+| Timeline        | Bottom                        |
 
-Each panel appears once. Later panels, such as the exposure sheet and camera, join this list.
+Each panel appears once. Later panels join this list.
 
 ## Moving tabs
 

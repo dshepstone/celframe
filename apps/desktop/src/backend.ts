@@ -46,7 +46,23 @@ export interface Scene {
   frameRate: number;
   /** Bottom layer first. */
   layers: Layer[];
+  camera: Camera;
 }
+
+/** The scene camera. See docs/specs/scene-camera.md. */
+export interface Camera {
+  /** The scene point at the middle of the frame. */
+  x: Animated;
+  y: Animated;
+  /** Distance from the scene; 1000 frames it exactly. */
+  z: Animated;
+  /** Degrees, counter-clockwise. */
+  rotation: Animated;
+  /** Lens magnification; 1 is standard. */
+  zoom: Animated;
+}
+
+export type CameraProperty = keyof Camera;
 
 export interface Project {
   id: string;
@@ -80,6 +96,19 @@ export type Command =
       scene: string;
       layer: string;
       property: LayerProperty;
+      value: number;
+    }
+  | { type: "setCameraKey"; scene: string; property: CameraProperty; key: Key }
+  | {
+      type: "removeCameraKey";
+      scene: string;
+      property: CameraProperty;
+      frame: number;
+    }
+  | {
+      type: "setCameraBaseValue";
+      scene: string;
+      property: CameraProperty;
       value: number;
     }
   | { type: "batch"; commands: Command[] };

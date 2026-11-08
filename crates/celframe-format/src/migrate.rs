@@ -19,7 +19,29 @@ pub struct RawDocument {
 pub type Migration = fn(&mut RawDocument) -> Result<(), String>;
 
 /// Index 0 upgrades version 1 to 2, index 1 upgrades 2 to 3, and so on.
-pub(crate) const MIGRATIONS: &[Migration] = &[v1_to_v2, v2_to_v3];
+pub(crate) const MIGRATIONS: &[Migration] = &[v1_to_v2, v2_to_v3, v3_to_v4];
+
+/// Version 4 adds a keyable `camera` to every scene. Scenes saved before it use the standard
+/// camera, which frames them exactly as before.
+fn v3_to_v4(document: &mut RawDocument) -> Result<(), String> {
+    let constant = |value: f64| serde_json::json!({ "value": value, "keys": [] });
+    for scene in document.scenes.values_mut() {
+        scene
+            .as_object_mut()
+            .ok_or("a scene isn't an object")?
+            .insert(
+                "camera".to_owned(),
+                serde_json::json!({
+                    "x": constant(0.0),
+                    "y": constant(0.0),
+                    "z": constant(celframe_core::STANDARD_DISTANCE),
+                    "rotation": constant(0.0),
+                    "zoom": constant(1.0),
+                }),
+            );
+    }
+    Ok(())
+}
 
 /// Version 3 adds keyable `opacity` to every layer. Layers saved before it are fully opaque.
 fn v2_to_v3(document: &mut RawDocument) -> Result<(), String> {

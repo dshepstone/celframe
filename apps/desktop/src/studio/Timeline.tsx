@@ -1,7 +1,8 @@
 import { Fragment, type MouseEvent, type ReactNode } from "react";
 import type { Layer, TimingEdit } from "../backend";
 import { targetLayer, useApp } from "../store";
-import { KeyRow } from "./KeyRow";
+import { CameraKeyRow, KeyRow } from "./KeyRow";
+import { cameraKeyFrames } from "../camera";
 import { startScrub } from "./scrub";
 
 const CELL = 22;
@@ -252,6 +253,13 @@ export function Timeline() {
             </tr>
           </thead>
           <tbody>
+            {cameraKeyFrames(scene.camera).length > 0 ? (
+              <CameraKeyRow
+                scene={scene.id}
+                camera={scene.camera}
+                frames={frames}
+              />
+            ) : null}
             {layers.map((layer) => (
               <Fragment key={layer.id}>
                 <tr

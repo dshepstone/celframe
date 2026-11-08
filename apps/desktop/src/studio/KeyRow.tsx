@@ -1,5 +1,6 @@
 import { useState, type PointerEvent as ReactPointerEvent } from "react";
-import type { Layer } from "../backend";
+import type { Camera, Command, Layer } from "../backend";
+import { cameraKeyFrames, moveCameraKeys } from "../camera";
 import { useApp } from "../store";
 
 /** The frame of the key-row cell under a point, if any. */
@@ -13,23 +14,33 @@ function keyFrameAt(x: number, y: number): number | null {
 }
 
 /**
- * A slim row under a keyed layer in the timeline, with a diamond at each key. Clicking one goes
- * to its frame; dragging one moves the key. See docs/specs/keyframes.md.
+ * A slim timeline row with a diamond at each keyed frame. Clicking one goes to its frame;
+ * dragging one moves its keys. See docs/specs/keyframes.md.
  */
-export function KeyRow({
-  scene,
-  layer,
+function KeyTrack({
+  name,
+  heading,
+  keyName,
+  keyFrames,
   frames,
+  move,
 }: {
-  scene: string;
-  layer: Layer;
+  /** The row's accessible name. */
+  name: string;
+  /** The row's visible heading. */
+  heading: string;
+  /** Names each diamond, as in "Opacity key at frame 3". */
+  keyName: string;
+  keyFrames: number[];
   frames: number;
+  /** The edit that moves the keys at one frame to another. */
+  move: (from: number, to: number) => Command;
 }) {
   const { document: doc, runCommand, setCurrentFrame } = useApp();
   const [dragging, setDragging] = useState<{ from: number; to: number } | null>(
     null,
   );
-  const keys = new Map(layer.opacity.keys.map((k) => [k.frame, k]));
+  const keyed = new Set(keyFrames);
   const current = doc?.currentFrame ?? 0;
 
   const press = (event: ReactPointerEvent, from: number) => {
@@ -40,7 +51,7 @@ export function KeyRow({
     const y = row.top + row.height / 2;
     let to = from;
     setDragging({ from, to });
-    const move = (e: PointerEvent) => {
+    const onMove = (e: PointerEvent) => {
       const frame = keyFrameAt(e.clientX, y);
       if (frame !== null && frame !== to) {
         to = frame;
@@ -48,53 +59,33 @@ export function KeyRow({
       }
     };
     const up = () => {
-      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", up);
       setDragging(null);
-      const key = keys.get(from);
-      if (!key) return;
       if (to === from) {
         void setCurrentFrame(from);
         return;
       }
-      // Moving a key onto another replaces it: one undo step either way.
-      void runCommand({
-        type: "batch",
-        commands: [
-          {
-            type: "removeKey",
-            scene,
-            layer: layer.id,
-            property: "opacity",
-            frame: from,
-          },
-          {
-            type: "setKey",
-            scene,
-            layer: layer.id,
-            property: "opacity",
-            key: { ...key, frame: to },
-          },
-        ],
-      });
+      // Moving keys onto others replaces them: one undo step either way.
+      void runCommand(move(from, to));
     };
-    window.addEventListener("pointermove", move);
+    window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", up);
   };
 
   return (
-    <tr aria-label={`${layer.name} keys`}>
+    <tr aria-label={name}>
       <th
         scope="row"
         className="sticky left-0 z-10 h-3.5 border-r border-border bg-surface px-2 pl-4 text-left text-[10px] font-normal text-text-muted"
       >
-        Opacity
+        {heading}
       </th>
       {Array.from({ length: frames }, (_, frame) => {
-        const key = keys.get(frame);
+        const key = keyed.has(frame);
         const shown = dragging
           ? frame === dragging.to || (key && frame !== dragging.from)
-          : Boolean(key);
+          : key;
         return (
           <td
             key={frame}
@@ -106,7 +97,7 @@ export function KeyRow({
             {shown ? (
               <button
                 type="button"
-                aria-label={`Opacity key at frame ${frame + 1}`}
+                aria-label={`${keyName} key at frame ${frame + 1}`}
                 onPointerDown={(e) => key && press(e, frame)}
                 className={`cursor-ew-resize text-[10px] leading-none outline-none focus-visible:outline-2 focus-visible:outline-focus-ring ${
                   dragging && frame === dragging.to
@@ -121,5 +112,74 @@ export function KeyRow({
         );
       })}
     </tr>
+  );
+}
+
+/** A keyed layer's opacity keys, under the layer in the timeline. */
+export function KeyRow({
+  scene,
+  layer,
+  frames,
+}: {
+  scene: string;
+  layer: Layer;
+  frames: number;
+}) {
+  const keys = new Map(layer.opacity.keys.map((k) => [k.frame, k]));
+  return (
+    <KeyTrack
+      name={`${layer.name} keys`}
+      heading="Opacity"
+      keyName="Opacity"
+      keyFrames={[...keys.keys()]}
+      frames={frames}
+      move={(from, to) => {
+        const key = keys.get(from);
+        return {
+          type: "batch",
+          commands: key
+            ? [
+                {
+                  type: "removeKey",
+                  scene,
+                  layer: layer.id,
+                  property: "opacity",
+                  frame: from,
+                },
+                {
+                  type: "setKey",
+                  scene,
+                  layer: layer.id,
+                  property: "opacity",
+                  key: { ...key, frame: to },
+                },
+              ]
+            : [],
+        };
+      }}
+    />
+  );
+}
+
+/** The scene camera's keys, at the top of the timeline. A diamond stands for every value
+ * keyed at that frame, and moving it moves them all. */
+export function CameraKeyRow({
+  scene,
+  camera,
+  frames,
+}: {
+  scene: string;
+  camera: Camera;
+  frames: number;
+}) {
+  return (
+    <KeyTrack
+      name="Camera keys"
+      heading="Camera"
+      keyName="Camera"
+      keyFrames={cameraKeyFrames(camera)}
+      frames={frames}
+      move={(from, to) => moveCameraKeys(scene, camera, from, to)}
+    />
   );
 }

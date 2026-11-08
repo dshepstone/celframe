@@ -139,6 +139,17 @@ fn version_1_file() -> (Project, Vec<u8>) {
     let mut scene_json = serde_json::to_value(scene).unwrap();
     let stroke = &mut scene_json["layers"][0]["drawings"][0]["strokes"][0];
     stroke.as_object_mut().unwrap().remove("art").unwrap();
+    // Nor do layers have `opacity`, nor scenes a `camera`.
+    scene_json["layers"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("opacity")
+        .unwrap();
+    scene_json
+        .as_object_mut()
+        .unwrap()
+        .remove("camera")
+        .unwrap();
 
     let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
     let options = SimpleFileOptions::default();
@@ -154,4 +165,33 @@ fn version_1_file() -> (Project, Vec<u8>) {
 fn a_version_1_file_opens_with_every_stroke_as_line_art() {
     let (project, bytes) = version_1_file();
     assert_eq!(read_project(Cursor::new(bytes)).unwrap(), project);
+}
+
+#[test]
+fn a_version_3_scene_opens_with_the_standard_camera() {
+    let project = Project::starter("Before cameras");
+    let scene = &project.scenes[0];
+    let manifest = json!({
+        "schemaVersion": 3,
+        "id": project.id,
+        "name": project.name,
+        "scenes": [scene.id],
+    });
+    let mut scene_json = serde_json::to_value(scene).unwrap();
+    scene_json
+        .as_object_mut()
+        .unwrap()
+        .remove("camera")
+        .unwrap();
+    let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
+    let options = SimpleFileOptions::default();
+    zip.start_file("project.json", options).unwrap();
+    zip.write_all(manifest.to_string().as_bytes()).unwrap();
+    zip.start_file(format!("scenes/{}.json", scene.id.as_uuid()), options)
+        .unwrap();
+    zip.write_all(scene_json.to_string().as_bytes()).unwrap();
+    let bytes = zip.finish().unwrap().into_inner();
+    let loaded = read_project(Cursor::new(bytes)).unwrap();
+    assert_eq!(loaded, project);
+    assert_eq!(loaded.scenes[0].camera, celframe_core::Camera::default());
 }

@@ -3,7 +3,7 @@
 
 use std::borrow::Cow;
 
-use celframe_core::{Art, LayerId, Scene, Stroke, StrokeId, StrokeSample};
+use celframe_core::{Art, Framing, LayerId, Scene, Stroke, StrokeId, StrokeSample};
 use celframe_render::{Canvas, Paper, RenderError, Renderer, View};
 use serde::Deserialize;
 use tauri::WebviewWindow;
@@ -192,6 +192,27 @@ pub fn view_strokes(
     strokes
 }
 
+/// How a view frames the scene at `frame`: through the scene camera in the Camera view, and
+/// unchanged in the Drawing view, which the camera never moves.
+pub fn framing(scene: &Scene, mode: ViewMode, frame: u32) -> Framing {
+    match mode {
+        ViewMode::Camera => scene.camera.framing(frame),
+        ViewMode::Drawing => Framing::IDENTITY,
+    }
+}
+
+/// Scene-space strokes as `framing` shows them. Borrowed strokes stay borrowed when the
+/// framing changes nothing.
+pub fn framed<'a>(framing: &Framing, strokes: Vec<Cow<'a, Stroke>>) -> Vec<Cow<'a, Stroke>> {
+    if framing.is_identity() {
+        return strokes;
+    }
+    strokes
+        .into_iter()
+        .map(|s| Cow::Owned(framing.stroke(&s)))
+        .collect()
+}
+
 fn stroke_through(points: &[[f64; 2]], width: f64, color: [u8; 4]) -> Stroke {
     Stroke {
         id: StrokeId::from_u128(0),
@@ -315,6 +336,7 @@ pub struct Mapping {
     layout: CanvasLayout,
     viewport: [u32; 4],
     view: View,
+    framing: Framing,
 }
 
 impl Mapping {
@@ -325,19 +347,26 @@ impl Mapping {
             layout: *layout,
             viewport: canvas.viewport,
             view,
+            framing: Framing::IDENTITY,
         }
+    }
+
+    /// The same mapping for a view that shows the scene through `framing`.
+    pub fn through(self, framing: Framing) -> Self {
+        Self { framing, ..self }
     }
 
     /// A point in CSS pixels from the window's top left, as pointer events report it.
     pub fn scene_point(&self, x: f64, y: f64) -> [f64; 2] {
         let [vx, vy, vw, vh] = self.viewport.map(f64::from);
         let device = [x * self.layout.scale - vx, y * self.layout.scale - vy];
-        self.view.screen_to_scene(device, [vw, vh])
+        self.framing
+            .to_scene(self.view.screen_to_scene(device, [vw, vh]))
     }
 
     /// Half a device pixel, in scene units: samples closer than this are dropped.
     pub fn min_distance(&self) -> f64 {
-        0.5 / self.view.zoom
+        0.5 / (self.view.zoom * self.framing.scale)
     }
 }
 
@@ -831,6 +860,45 @@ mod tests {
         assert!((screen[0] + vx - 140.0).abs() < 1e-9);
         assert!((screen[1] + vy - 110.0).abs() < 1e-9);
         assert!((mapping.min_distance() - 0.5 / view.zoom).abs() < 1e-12);
+    }
+
+    #[test]
+    fn the_camera_view_looks_through_the_scene_camera_and_the_drawing_view_ignores_it() {
+        let mut scene = two_layers();
+        // Truck in to half the standard distance, centred on x = 10.
+        scene.camera.z = celframe_core::Animated::constant(celframe_core::STANDARD_DISTANCE / 2.0);
+        scene.camera.x = celframe_core::Animated::constant(10.0);
+        let camera = framing(&scene, ViewMode::Camera, 0);
+        assert_eq!(camera.scale, 2.0);
+        assert!(framing(&scene, ViewMode::Drawing, 0).is_identity());
+
+        let strokes = framed(&camera, view_strokes(&scene, ViewMode::Camera, None, 0));
+        // Layers draw at x = 1 and x = 2, so after the camera at -18 and -16, twice as wide.
+        assert_eq!(xs(&strokes), vec![-18.0, -16.0]);
+        assert!(
+            strokes
+                .iter()
+                .all(|s| s.base_width == 2.0 * line(0.0).base_width)
+        );
+    }
+
+    #[test]
+    fn pointers_in_the_camera_view_land_where_the_camera_shows_them() {
+        let mut scene = Scene::new("Shot");
+        scene.camera.z = celframe_core::Animated::constant(250.0);
+        scene.camera.rotation = celframe_core::Animated::constant(30.0);
+        scene.camera.y = celframe_core::Animated::constant(-40.0);
+        let layout = layout(2.0);
+        let size = viewport_size(&layout);
+        let camera = framing(&scene, ViewMode::Camera, 0);
+        let mapping = Mapping::new(&scene, &layout, None).through(camera);
+        let (canvas, view) = frame_for(&scene, &layout, [800, 600], None);
+        let [vx, vy, ..] = canvas.viewport.map(f64::from);
+        let point = mapping.scene_point(70.0, 55.0);
+        let screen = view.scene_to_screen(camera.to_gate(point), size);
+        assert!((screen[0] + vx - 140.0).abs() < 1e-9);
+        assert!((screen[1] + vy - 110.0).abs() < 1e-9);
+        assert!((mapping.min_distance() - 0.5 / (view.zoom * 4.0)).abs() < 1e-12);
     }
 
     #[test]

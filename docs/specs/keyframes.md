@@ -1,6 +1,6 @@
 # Keyframes
 
-Values that change over time. Step 5 of the [production plan](../plans/production-features.md). The first keyable value is **layer opacity**; the camera (step 6), layer depth (step 7) and pegs (step 8) use the same system.
+Values that change over time. Step 5 of the [production plan](../plans/production-features.md). The first keyable value was **layer opacity**; the [scene camera](scene-camera.md) uses the same system, and layer depth (step 7) and pegs (step 8) will too.
 
 ## Animated values
 

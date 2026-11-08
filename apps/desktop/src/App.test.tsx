@@ -217,7 +217,10 @@ describe("App shell", () => {
     });
     expect(useApp.getState().dockDrag).toBeNull();
     const stacks = useApp.getState().dock.areas.right.map((s) => s.tabs);
-    expect(stacks).toEqual([["tool"], ["layers", "xsheet", "colour"]]);
+    expect(stacks).toEqual([
+      ["tool", "camera"],
+      ["layers", "xsheet", "colour"],
+    ]);
     expect(
       right().getByRole("tab", { name: "Colour", selected: true }),
     ).toBeTruthy();
@@ -239,7 +242,7 @@ describe("App shell", () => {
       await screen.findByRole("menuitem", { name: "Reset layout" }),
     );
     expect(useApp.getState().dock.areas.right.map((s) => s.tabs)).toEqual([
-      ["tool"],
+      ["tool", "camera"],
       ["colour"],
       ["layers", "xsheet"],
     ]);
@@ -485,6 +488,116 @@ describe("App shell", () => {
     );
     await userEvent.keyboard("o");
     expect(useApp.getState().onion.enabled).toBe(false);
+  });
+
+  it("keys the scene camera from its panel and moves its keys in the timeline", async () => {
+    const withCamera = (
+      camera: Partial<ReturnType<typeof scene>["camera"]>,
+      currentFrame = 0,
+    ) =>
+      view({
+        currentFrame,
+        sceneLength: 12,
+        project: {
+          id: "p",
+          name: "Bouncing ball",
+          scenes: [scene({ camera: { ...scene().camera, ...camera } })],
+        },
+      });
+    vi.mocked(backend.getDocument).mockResolvedValue(withCamera({}));
+    vi.mocked(backend.executeCommand).mockResolvedValue(withCamera({}));
+    render(<App />);
+    await screen.findByText("Bouncing ball");
+    // The view tabs have a Camera tab too; this is the dock panel's.
+    const cameraTab = screen
+      .getAllByRole("tab", { name: "Camera" })
+      .find((tab) => tab.id === "dock-tab-camera");
+    if (!cameraTab) throw new Error("no Camera panel tab");
+    await userEvent.click(cameraTab);
+    const panel = within(screen.getByRole("region", { name: "Camera" }));
+
+    // Without keys, a new distance changes the base value.
+    const distance = panel.getByRole("spinbutton", { name: "Distance value" });
+    fireEvent.change(distance, { target: { value: "500" } });
+    fireEvent.blur(distance);
+    expect(backend.executeCommand).toHaveBeenLastCalledWith({
+      type: "setCameraBaseValue",
+      scene: "s",
+      property: "z",
+      value: 500,
+    });
+
+    // Zoom shows as a percentage and stores as a factor.
+    await userEvent.click(panel.getByRole("button", { name: "Set Zoom key" }));
+    expect(backend.executeCommand).toHaveBeenLastCalledWith({
+      type: "setCameraKey",
+      scene: "s",
+      property: "zoom",
+      key: { frame: 0, value: 1, interpolation: "ease" },
+    });
+
+    await userEvent.click(panel.getByRole("button", { name: "Key all" }));
+    const keyAll = vi.mocked(backend.executeCommand).mock.lastCall?.[0];
+    expect(keyAll).toMatchObject({ type: "batch" });
+    expect(
+      keyAll?.type === "batch" &&
+        keyAll.commands.map((c) => c.type === "setCameraKey" && c.property),
+    ).toEqual(["x", "y", "z", "rotation", "zoom"]);
+
+    // A truck in from 1000 to 500 over frames 1 to 11: frame 6 is halfway, linear.
+    const truckIn = withCamera(
+      {
+        z: {
+          value: 1000,
+          keys: [
+            { frame: 0, value: 1000, interpolation: "linear" },
+            { frame: 10, value: 500, interpolation: "linear" },
+          ],
+        },
+      },
+      5,
+    );
+    vi.mocked(backend.executeCommand).mockResolvedValue(truckIn);
+    act(() => useApp.setState({ document: truckIn }));
+    expect((distance as HTMLInputElement).value).toBe("750");
+    expect(panel.getByLabelText("Camera framing").textContent).toContain(
+      "1440 × 810",
+    );
+    // The timeline's camera row moves every key at a frame together.
+    const timeline = within(screen.getByRole("region", { name: "Timeline" }));
+    const diamond = timeline.getByRole("button", {
+      name: "Camera key at frame 11",
+    });
+    const target = timeline
+      .getByRole("row", { name: "Camera keys" })
+      .querySelector('[data-key-frame="8"]');
+    fireEvent.pointerDown(diamond, { button: 0 });
+    document.elementsFromPoint = () => (target ? [target] : []);
+    act(() => {
+      window.dispatchEvent(
+        new MouseEvent("pointermove", { clientX: 10, clientY: 10 }),
+      );
+    });
+    act(() => {
+      window.dispatchEvent(new MouseEvent("pointerup"));
+    });
+    expect(backend.executeCommand).toHaveBeenLastCalledWith({
+      type: "batch",
+      commands: [
+        { type: "removeCameraKey", scene: "s", property: "z", frame: 10 },
+        {
+          type: "setCameraKey",
+          scene: "s",
+          property: "z",
+          key: { frame: 8, value: 500, interpolation: "linear" },
+        },
+      ],
+    });
+    // Arrows step between camera keys.
+    await userEvent.click(
+      panel.getByRole("button", { name: "Next camera key" }),
+    );
+    expect(backend.setCurrentFrame).toHaveBeenLastCalledWith(10);
   });
 
   it("keys layer opacity and moves keys along the timeline", async () => {

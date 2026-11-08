@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::animated::{Animated, Key};
+use crate::camera::CameraProperty;
 use crate::ids::{DrawingId, LayerId, SceneId, StrokeId};
 use crate::model::{Drawing, Exposure, ExposureError, Layer, Project, Scene, Stroke, StrokeSample};
 
@@ -127,6 +128,23 @@ pub enum Command {
         scene: SceneId,
         layer: LayerId,
         property: LayerProperty,
+        value: f64,
+    },
+    /// Adds a key to the scene camera, or replaces the key at the same frame.
+    SetCameraKey {
+        scene: SceneId,
+        property: CameraProperty,
+        key: Key,
+    },
+    RemoveCameraKey {
+        scene: SceneId,
+        property: CameraProperty,
+        frame: u32,
+    },
+    /// Changes a camera value used while it has no keys.
+    SetCameraBaseValue {
+        scene: SceneId,
+        property: CameraProperty,
         value: f64,
     },
 }
@@ -431,6 +449,58 @@ impl Command {
                 Ok(Command::SetBaseValue {
                     scene,
                     layer,
+                    property,
+                    value,
+                })
+            }
+            Command::SetCameraKey {
+                scene,
+                property,
+                key,
+            } => {
+                if !key.value.is_finite() || !property.range().contains(&key.value) {
+                    return Err(CommandError::InvalidValue);
+                }
+                let frame = key.frame;
+                let value = property.of_mut(&mut find_scene(project, scene)?.camera);
+                Ok(match value.set_key(key) {
+                    Some(old) => Command::SetCameraKey {
+                        scene,
+                        property,
+                        key: old,
+                    },
+                    None => Command::RemoveCameraKey {
+                        scene,
+                        property,
+                        frame,
+                    },
+                })
+            }
+            Command::RemoveCameraKey {
+                scene,
+                property,
+                frame,
+            } => {
+                let value = property.of_mut(&mut find_scene(project, scene)?.camera);
+                let key = value.remove_key(frame).ok_or(CommandError::NotFound)?;
+                Ok(Command::SetCameraKey {
+                    scene,
+                    property,
+                    key,
+                })
+            }
+            Command::SetCameraBaseValue {
+                scene,
+                property,
+                value,
+            } => {
+                if !value.is_finite() || !property.range().contains(&value) {
+                    return Err(CommandError::InvalidValue);
+                }
+                let target = property.of_mut(&mut find_scene(project, scene)?.camera);
+                let value = std::mem::replace(&mut target.value, value);
+                Ok(Command::SetCameraBaseValue {
+                    scene,
                     property,
                     value,
                 })

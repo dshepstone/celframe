@@ -6,6 +6,7 @@ export const PANELS = [
   "layers",
   "timeline",
   "xsheet",
+  "camera",
 ] as const;
 export type PanelId = (typeof PANELS)[number];
 
@@ -66,7 +67,7 @@ export function defaultLayout(): DockLayout {
     areas: {
       left: [],
       right: [
-        stack("right-tool", ["tool"], 1.4),
+        stack("right-tool", ["tool", "camera"], 1.4),
         stack("right-colour", ["colour"], 0.6),
         stack("right-layers", ["layers", "xsheet"], 1),
       ],

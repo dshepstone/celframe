@@ -12,7 +12,7 @@ Shows the scene as it will be rendered:
 - Outside the gate the scene stays visible but **dimmed**, covered by the light grey surround at 65% opacity, so artwork that runs past the frame can still be seen and worked on.
 - Zoom reaches from 1% to 25,600%, so you can pull far back from the gate or move right in.
 - Fit shows the whole gate filling 90% of the view.
-- Once the scene camera arrives (step 6), the gate follows the camera's framing, and moving the camera in and out along Z changes what it frames.
+- The view looks through the [scene camera](scene-camera.md): the gate stays put and shows what the camera frames, while the artwork moves behind it as the camera pans, trucks, turns and zooms.
 
 ## Drawing view
 
