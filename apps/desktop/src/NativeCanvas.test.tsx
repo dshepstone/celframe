@@ -70,6 +70,18 @@ describe("native canvas", () => {
     expect(canvas().className).toContain("bg-canvas-backdrop");
   });
 
+  it("keeps every layer behind the canvas area see-through", async () => {
+    vi.mocked(backend.setCanvasLayout).mockResolvedValue(true);
+    render(<App />);
+    await waitFor(() =>
+      expect(canvas().getAttribute("data-native-canvas")).toBe("true"),
+    );
+    // Any background between the canvas area and the window would hide the native canvas.
+    for (let el = canvas().parentElement; el; el = el.parentElement) {
+      expect(el.className).not.toMatch(/(^|\s)bg-/);
+    }
+  });
+
   it("sends the new backdrop when the theme changes", async () => {
     vi.mocked(backend.setCanvasLayout).mockResolvedValue(true);
     render(<App />);

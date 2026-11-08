@@ -54,7 +54,8 @@
     font-size: 12px;
     line-height: 16px;
     -webkit-font-smoothing: antialiased;
-    background: var(--color-surface);
+    /* Leave the page see-through: the native canvas draws under it and must show through it
+       (ADR-0001). Every bar and panel paints its own background instead. */
     color: var(--color-text);
     /* Interface text isn't for selecting; fields still are. */
     user-select: none;

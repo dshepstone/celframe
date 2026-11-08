@@ -210,7 +210,7 @@ export function App() {
 
   return (
     // No background here: the canvas area must stay see-through for the native canvas.
-    <div className="flex h-screen flex-col bg-surface text-text">
+    <div className="flex h-screen flex-col text-text">
       <header className="flex h-8 shrink-0 items-center gap-0.5 border-b border-border bg-surface-raised px-1.5">
         <span className="mr-1.5 ml-0.5 flex">
           <LogoTile size={18} />
