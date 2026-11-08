@@ -6,19 +6,20 @@ Everything is designed from general animation practice, in Celframe's own words 
 
 ## Overview
 
-| Step | Feature                                                    | Depends on | Owner decisions needed           |
-| ---- | ---------------------------------------------------------- | ---------- | -------------------------------- |
-| 1    | Dockable, tabbed panel areas                               | —          | —                                |
-| 2    | Drawing view and Camera view tabs, resolution gate         | 1          | —                                |
-| 3    | Timing basics: current frame, playhead, editable exposures | 1          | —                                |
-| 4    | Exposure sheet                                             | 1, 3       | —                                |
-| 5    | Keyframes for animated values                              | 3          | File format version 3            |
-| 6    | Scene camera with Z depth and camera moves                 | 2, 5       | —                                |
-| 7    | Multiplane: keyable layer depth                            | 5, 6       | —                                |
-| 8    | Bitmap layers and image assets                             | —          | File format version 4            |
-| 9    | Scanning                                                   | 8          | Scanner libraries on each system |
-| 10   | Camera capture: webcams and DSLRs                          | 8          | DSLR support on Windows          |
-| 11   | Peg-hole registration                                      | 8, 9 or 10 | —                                |
+| Step | Feature                                                    | Depends on  | Owner decisions needed           |
+| ---- | ---------------------------------------------------------- | ----------- | -------------------------------- |
+| 1    | Dockable, tabbed panel areas                               | —           | —                                |
+| 2    | Drawing view and Camera view tabs, resolution gate         | 1           | —                                |
+| 3    | Timing basics: current frame, playhead, editable exposures | 1           | —                                |
+| 4    | Exposure sheet                                             | 1, 3        | —                                |
+| 5    | Keyframes for animated values                              | 3           | File format version 3            |
+| 6    | Scene camera with Z depth and camera moves                 | 2, 5        | —                                |
+| 7    | Multiplane: keyable layer depth                            | 5, 6        | —                                |
+| 8    | Pegs and the node view                                     | 5, 7        | File format version 4            |
+| 9    | Bitmap layers and image assets                             | —           | File format version 5            |
+| 10   | Scanning                                                   | 9           | Scanner libraries on each system |
+| 11   | Camera capture: webcams and DSLRs                          | 9           | DSLR support on Windows          |
+| 12   | Peg-hole registration                                      | 9, 10 or 11 | —                                |
 
 ## 1. Dockable, tabbed panel areas
 
@@ -83,16 +84,27 @@ Layers placed at different distances from the camera, for parallax:
 - A side view in the Camera panel shows layers by depth, so they can be dragged nearer or farther.
 - Done when: a camera pan over three layers at different depths shows correct parallax.
 
-## 8. Bitmap layers and image assets
+## 8. Pegs and the node view
+
+The structure of a scene shown and edited as a graph of connected nodes, alongside the Layers panel and timeline:
+
+- **Pegs:** transform nodes with keyable position, rotation, scale, skew and pivot. Layers and other pegs hang from a peg and move with it, so a character, a prop or a whole group can be animated together. Pegs nest.
+- **Node view:** a dock panel where every layer, peg, group, composite and the scene's output is a node, connected by wires that show what feeds what. Nodes can be added, wired, rewired, grouped and arranged; the graph scrolls and zooms.
+- The Layers panel, timeline and exposure sheet show the same structure, so a change in one shows in the others.
+- Later node types such as effects, masks and deformers plug into the same view.
+- This changes the file format to **version 4**, with a migration that connects existing layers straight to the scene's output.
+- Done when: a character's layers under a peg can be rewired in the node view and animated by keying the peg.
+
+## 9. Bitmap layers and image assets
 
 The base that scanning and capture need:
 
 - Layers can hold bitmap drawings as well as vector ones. Images are stored in the `.celf` file's `assets/` folder.
 - Import images and numbered image sequences, one image per drawing.
-- This changes the file format to **version 4**.
+- This changes the file format to **version 5**.
 - Done when: an image sequence can be imported, timed, saved and reopened.
 
-## 9. Scanning
+## 10. Scanning
 
 Bring paper drawings in from a scanner:
 
@@ -101,7 +113,7 @@ Bring paper drawings in from a scanner:
 - **Decision needed:** linking to SANE on Linux, which is GPL-licensed with an exception for programs that use it. Windows and macOS use built-in system services.
 - Done when: a stack of sheets can be scanned into a layer, one drawing per sheet.
 
-## 10. Camera capture
+## 11. Camera capture
 
 Shoot paper animation, or stop motion, with a camera on a stand:
 
@@ -111,7 +123,7 @@ Shoot paper animation, or stop motion, with a camera on a stand:
 - **Decision needed:** DSLR support on Windows. Camera makers' own control kits are proprietary and can't ship in GPL software. The options are libgphoto2 on Windows (less mature there), or the camera's own webcam mode.
 - Done when: a sequence can be shot from a webcam and from a DSLR into a layer.
 
-## 11. Peg-hole registration
+## 12. Peg-hole registration
 
 Paper animation stays in register through the punched peg holes along each sheet's edge. Celframe finds them and lines every frame up:
 
