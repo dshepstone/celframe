@@ -248,6 +248,53 @@ fn opacity_key(frame: u32, value: f64) -> celframe_core::Key {
 reversible!(set_key, f => Command::SetKey { scene: f.scene, layer: f.layer, property: celframe_core::LayerProperty::Opacity, key: opacity_key(3, 0.5) });
 reversible!(set_base_value, f => Command::SetBaseValue { scene: f.scene, layer: f.layer, property: celframe_core::LayerProperty::Opacity, value: 0.25 });
 
+reversible!(set_camera_key, f => Command::SetCameraKey { scene: f.scene, property: celframe_core::CameraProperty::Z, key: opacity_key(3, 500.0) });
+reversible!(set_camera_base_value, f => Command::SetCameraBaseValue { scene: f.scene, property: celframe_core::CameraProperty::X, value: -40.0 });
+
+#[test]
+fn camera_keys_replace_and_remove_reversibly() {
+    let f = fixture();
+    let mut project = f.project.clone();
+    let add = |frame, value| Command::SetCameraKey {
+        scene: f.scene,
+        property: celframe_core::CameraProperty::Rotation,
+        key: opacity_key(frame, value),
+    };
+    add(4, 15.0).apply(&mut project).unwrap();
+    assert_reversible(project.clone(), add(4, -30.0));
+    assert_reversible(
+        project,
+        Command::RemoveCameraKey {
+            scene: f.scene,
+            property: celframe_core::CameraProperty::Rotation,
+            frame: 4,
+        },
+    );
+}
+
+#[test]
+fn camera_values_out_of_range_are_refused() {
+    let f = fixture();
+    assert_rejected(
+        f.project.clone(),
+        Command::SetCameraBaseValue {
+            scene: f.scene,
+            property: celframe_core::CameraProperty::Z,
+            value: 0.0,
+        },
+        CommandError::InvalidValue,
+    );
+    assert_rejected(
+        f.project,
+        Command::SetCameraKey {
+            scene: f.scene,
+            property: celframe_core::CameraProperty::Zoom,
+            key: opacity_key(0, f64::INFINITY),
+        },
+        CommandError::InvalidValue,
+    );
+}
+
 #[test]
 fn replacing_and_removing_keys_reverse_exactly() {
     let f = fixture();

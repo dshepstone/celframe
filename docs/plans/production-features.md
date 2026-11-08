@@ -13,10 +13,10 @@ Everything is designed from general animation practice, in Celframe's own words 
 | 3    | Timing basics: current frame, playhead, editable exposures | 1           | —                                |
 | 4    | Exposure sheet                                             | 1, 3        | —                                |
 | 5    | Keyframes for animated values                              | 3           | File format version 3            |
-| 6    | Scene camera with Z depth and camera moves                 | 2, 5        | —                                |
+| 6    | Scene camera with Z depth and camera moves                 | 2, 5        | File format version 4            |
 | 7    | Multiplane: keyable layer depth                            | 5, 6        | —                                |
-| 8    | Pegs and the node view                                     | 5, 7        | File format version 4            |
-| 9    | Bitmap layers and image assets                             | —           | File format version 5            |
+| 8    | Pegs and the node view                                     | 5, 7        | File format version 5            |
+| 9    | Bitmap layers and image assets                             | —           | File format version 6            |
 | 10   | Scanning                                                   | 9           | Scanner libraries on each system |
 | 11   | Camera capture: webcams and DSLRs                          | 9           | DSLR support on Windows          |
 | 12   | Peg-hole registration                                      | 9, 10 or 11 | —                                |
@@ -74,7 +74,9 @@ A camera object belonging to each scene:
 - Position, **Z depth** (distance from the scene), rotation and field size, all keyable.
 - Camera moves are keys on these values: trucks in and out (Z), pans, tilts, rotations and zooms.
 - The Camera view shows its gate; the Drawing view ignores it. Camera controls get their own panel tab.
+- This changes the file format to **version 4**, with a migration from version 3.
 - Done when: a truck-in with an eased pan can be keyed and played back in the Camera view.
+- Spec: [scene camera](../specs/scene-camera.md).
 
 ## 7. Multiplane
 
@@ -92,7 +94,7 @@ The structure of a scene shown and edited as a graph of connected nodes, alongsi
 - **Node view:** a dock panel where every layer, peg, group, composite and the scene's output is a node, connected by wires that show what feeds what. Nodes can be added, wired, rewired, grouped and arranged; the graph scrolls and zooms.
 - The Layers panel, timeline and exposure sheet show the same structure, so a change in one shows in the others.
 - Later node types such as effects, masks and deformers plug into the same view.
-- This changes the file format to **version 4**, with a migration that connects existing layers straight to the scene's output.
+- This changes the file format to **version 5**, with a migration that connects existing layers straight to the scene's output.
 - Done when: a character's layers under a peg can be rewired in the node view and animated by keying the peg.
 
 ## 9. Bitmap layers and image assets
@@ -101,7 +103,7 @@ The base that scanning and capture need:
 
 - Layers can hold bitmap drawings as well as vector ones. Images are stored in the `.celf` file's `assets/` folder.
 - Import images and numbered image sequences, one image per drawing.
-- This changes the file format to **version 5**.
+- This changes the file format to **version 6**.
 - Done when: an image sequence can be imported, timed, saved and reopened.
 
 ## 10. Scanning

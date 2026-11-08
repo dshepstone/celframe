@@ -21,6 +21,13 @@ export function scene(overrides: Partial<Scene> = {}): Scene {
     height: 1080,
     frameRate: 24,
     layers: [layer("l1", { name: "Layer 1" })],
+    camera: {
+      x: { value: 0, keys: [] },
+      y: { value: 0, keys: [] },
+      z: { value: 1000, keys: [] },
+      rotation: { value: 0, keys: [] },
+      zoom: { value: 1, keys: [] },
+    },
     ...overrides,
   };
 }

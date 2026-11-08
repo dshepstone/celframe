@@ -13,7 +13,7 @@ use std::sync::{Mutex, MutexGuard};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use canvas::{CanvasLayout, Mapping, WindowCanvas};
-use celframe_core::{Command, Project, StrokeSample};
+use celframe_core::{Command, Framing, Project, Stroke, StrokeSample};
 use pen::PenOptions;
 use recovery::{RecoveryInfo, RecoveryStore};
 use serde::Deserialize;
@@ -59,21 +59,33 @@ fn redraw(app: &AppHandle) {
         };
         let pixel = 1.0 / zoom;
         let mode = canvas.mode();
+        let frame = session.current_frame();
+        // Artwork, onion skin and the selection are in scene space and move with the camera;
+        // the gate and its dimming are in the camera's own space and stay put.
+        let framing = canvas::framing(scene, mode, frame);
         // The frame's dimming and gate go under the selection's outlines and handles.
         let surround = canvas::surround(mode, &layout);
         let mut overlay = canvas::frame_overlay(scene, mode, pixel, surround);
-        overlay.extend(session.overlay(pixel));
-        let frame = session.current_frame();
+        overlay.extend(framed(&framing, session.overlay(pixel / framing.scale)));
         let layer = canvas.drawing_layer();
-        let strokes = canvas::view_strokes(scene, mode, layer, frame);
+        let strokes = canvas::framed(&framing, canvas::view_strokes(scene, mode, layer, frame));
         // Onion skin draws under the current drawing.
         let onion = canvas::onion_strokes(scene, layer, frame, &canvas.onion());
+        let onion = framed(&framing, onion);
         canvas.render(
             scene,
             onion.iter().chain(strokes.iter().map(|s| &**s)),
             &overlay,
         );
     }
+}
+
+/// Scene-space strokes as the camera shows them, copied only when it moves them.
+fn framed(framing: &Framing, strokes: Vec<Stroke>) -> Vec<Stroke> {
+    if framing.is_identity() {
+        return strokes;
+    }
+    strokes.iter().map(|s| framing.stroke(s)).collect()
 }
 
 /// Redraws after a command that may have changed the document.
@@ -277,7 +289,8 @@ fn mapping(session: &Session, canvas: &CanvasState) -> Result<Mapping, String> {
     let layout = canvas
         .layout()
         .ok_or("The canvas isn't ready to draw on.")?;
-    Ok(Mapping::new(scene, &layout, canvas.view()))
+    let framing = canvas::framing(scene, canvas.mode(), session.current_frame());
+    Ok(Mapping::new(scene, &layout, canvas.view()).through(framing))
 }
 
 fn to_scene(mapping: &Mapping, sample: PointerSample) -> StrokeSample {

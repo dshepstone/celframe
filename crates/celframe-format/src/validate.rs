@@ -24,6 +24,11 @@ pub(crate) fn validate(project: &Project) -> Result<(), FormatError> {
                 "a scene's size and frame rate must be greater than 0",
             ));
         }
+        if !scene.camera.is_valid() {
+            return Err(invalid(
+                "a scene's camera has a value out of range, or keys out of frame order",
+            ));
+        }
         let mut layer_ids = HashSet::new();
         for layer in &scene.layers {
             if !layer_ids.insert(layer.id) {

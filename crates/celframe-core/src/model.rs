@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::animated::Animated;
+use crate::camera::Camera;
 use crate::ids::{DrawingId, LayerId, ProjectId, SceneId, StrokeId};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -48,6 +49,7 @@ pub struct Scene {
     pub frame_rate: u32,
     /// Bottom layer first.
     pub layers: Vec<Layer>,
+    pub camera: Camera,
 }
 
 impl Scene {
@@ -71,6 +73,7 @@ impl Scene {
             height: 1080,
             frame_rate: 24,
             layers: vec![Layer::new("Layer 1")],
+            camera: Camera::default(),
         }
     }
 }

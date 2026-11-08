@@ -16,7 +16,7 @@ describe("dock layout", () => {
   it("starts with the default arrangement", () => {
     const layout = defaultLayout();
     expect(tabs(layout, "right")).toEqual([
-      ["tool"],
+      ["tool", "camera"],
       ["colour"],
       ["layers", "xsheet"],
     ]);
@@ -32,7 +32,7 @@ describe("dock layout", () => {
       index: 0,
     });
     expect(tabs(layout, "right")).toEqual([
-      ["tool"],
+      ["tool", "camera"],
       ["colour", "layers", "xsheet"],
     ]);
     expect(findPanel(layout, "colour")?.stack.active).toBe("colour");
@@ -63,7 +63,7 @@ describe("dock layout", () => {
       after: true,
     });
     expect(tabs(layout, "right")).toEqual([
-      ["tool"],
+      ["tool", "camera"],
       ["timeline"],
       ["colour"],
       ["layers", "xsheet"],
@@ -84,10 +84,10 @@ describe("dock layout", () => {
   it("leaves a lone tab dropped on its own stack where it is", () => {
     const layout = defaultLayout();
     expect(
-      moveTab(layout, "tool", {
+      moveTab(layout, "colour", {
         kind: "split",
         area: "right",
-        stack: "right-tool",
+        stack: "right-colour",
         after: false,
       }),
     ).toBe(layout);
@@ -160,7 +160,7 @@ describe("dock layout", () => {
     });
     const layout = parseLayout(stored);
     expect(tabs(layout, "right")).toEqual([
-      ["tool", "colour", "layers", "xsheet"],
+      ["tool", "colour", "layers", "xsheet", "camera"],
     ]);
     expect(layout.areas.right[0]?.active).toBe("tool");
   });
@@ -178,7 +178,7 @@ describe("dock layout", () => {
     });
     const layout = parseLayout(stored);
     expect(tabs(layout, "right")).toEqual([
-      ["tool"],
+      ["tool", "camera"],
       ["colour"],
       ["layers", "xsheet"],
     ]);

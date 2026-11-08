@@ -1,6 +1,6 @@
 # The .celf file format
 
-This is the open specification of Celframe's project format. It describes schema version 3.
+This is the open specification of Celframe's project format. It describes schema version 4.
 
 ## Container
 
@@ -73,7 +73,14 @@ A `.celf` file is a standard zip archive. Anyone can open it with ordinary zip t
         }
       ]
     }
-  ]
+  ],
+  "camera": {
+    "x": { "value": 0.0, "keys": [] },
+    "y": { "value": 0.0, "keys": [] },
+    "z": { "value": 1000.0, "keys": [] },
+    "rotation": { "value": 0.0, "keys": [] },
+    "zoom": { "value": 1.0, "keys": [] }
+  }
 }
 ```
 
@@ -91,6 +98,7 @@ A reader must reject a file that breaks any of these rules. Celframe also refuse
 - `color` is straight RGBA, with 8 bits per channel.
 - `art` is `"line"` or `"colour"`.
 - A layer's `opacity` has a base `value` and `keys`, each `{ "frame", "value", "interpolation" }` with interpolation `"linear"`, `"ease"` or `"step"`. Values are from 0 to 1, and keys are sorted by frame with no two at the same frame. See [keyframes](specs/keyframes.md).
+- A scene's `camera` has `x`, `y`, `z`, `rotation` and `zoom`, each a keyable value like `opacity`. `x` and `y` are within ±1,000,000, `z` is from 1 to 100,000, `rotation` is within ±3600 degrees, and `zoom` is from 0.01 to 100. See [the scene camera](specs/scene-camera.md).
 - Exposures are sorted by `startFrame`, don't overlap, last at least 1 frame, and use a drawing on the same layer.
 
 Undo history and view state, such as zoom, aren't stored.
@@ -107,3 +115,4 @@ Undo history and view state, such as zoom, aren't stored.
 | 1       | First version                                                                                 |
 | 2       | Adds `art` to every stroke. Upgrading makes every stroke line art.                            |
 | 3       | Adds keyable `opacity` to every layer. Upgrading makes every layer fully opaque with no keys. |
+| 4       | Adds a keyable `camera` to every scene. Upgrading gives every scene the standard camera.      |

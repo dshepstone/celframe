@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { CameraPanel } from "../studio/CameraPanel";
 import { ColourPanel } from "../studio/ColourPanel";
 import { ExposureSheet } from "../studio/ExposureSheet";
 import { LayersPanel } from "../studio/LayersPanel";
@@ -16,4 +17,5 @@ export const PANEL_INFO: Record<
   layers: { title: "Layers", render: () => <LayersPanel /> },
   timeline: { title: "Timeline", render: () => <Timeline /> },
   xsheet: { title: "Exposure sheet", render: () => <ExposureSheet /> },
+  camera: { title: "Camera", render: () => <CameraPanel /> },
 };
