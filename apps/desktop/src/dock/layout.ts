@@ -21,6 +21,8 @@ export interface Stack {
 }
 
 export interface DockLayout {
+  /** Raised when default places change, so stored layouts can move panels. */
+  version?: number;
   areas: Record<AreaId, Stack[]>;
   /** Side areas' widths and the bottom area's height, in CSS pixels. */
   sizes: Record<AreaId, number>;
@@ -52,16 +54,23 @@ function stack(id: string, tabs: PanelId[], weight = 1): Stack {
   return { id, tabs, active: tabs[0] as PanelId, weight };
 }
 
+/** The current layout version. Version 2 moved the exposure sheet to the right panels. */
+export const LAYOUT_VERSION = 2;
+
+/** Panels whose default place changed in each version, to move in older stored layouts. */
+const MOVED: Record<number, PanelId[]> = { 2: ["xsheet"] };
+
 export function defaultLayout(): DockLayout {
   return {
+    version: LAYOUT_VERSION,
     areas: {
       left: [],
       right: [
         stack("right-tool", ["tool"], 1.4),
         stack("right-colour", ["colour"], 0.6),
-        stack("right-layers", ["layers"], 1),
+        stack("right-layers", ["layers", "xsheet"], 1),
       ],
-      bottom: [stack("bottom-timeline", ["timeline", "xsheet"])],
+      bottom: [stack("bottom-timeline", ["timeline"])],
     },
     sizes: { left: 260, right: 272, bottom: 160 },
   };
@@ -251,6 +260,13 @@ export function parseLayout(stored: string | null): DockLayout {
   try {
     const value = JSON.parse(stored) as Partial<DockLayout>;
     const seen = new Set<PanelId>();
+    // Panels that moved since this layout was stored go to their new default places.
+    const storedVersion = Number(value.version) || 1;
+    const moved = new Set<PanelId>(
+      Object.entries(MOVED)
+        .filter(([version]) => Number(version) > storedVersion)
+        .flatMap(([, panels]) => panels),
+    );
     const areas = {} as Record<AreaId, Stack[]>;
     for (const area of AREAS) {
       const raw: unknown = value.areas?.[area];
@@ -260,7 +276,11 @@ export function parseLayout(stored: string | null): DockLayout {
         // Each panel appears once in the whole layout.
         const tabs: PanelId[] = [];
         for (const t of Array.isArray(s.tabs) ? s.tabs : []) {
-          if ((PANELS as readonly string[]).includes(t) && !seen.has(t)) {
+          if (
+            (PANELS as readonly string[]).includes(t) &&
+            !seen.has(t) &&
+            !moved.has(t)
+          ) {
             seen.add(t);
             tabs.push(t);
           }
@@ -285,7 +305,7 @@ export function parseLayout(stored: string | null): DockLayout {
       const size = Number(value.sizes?.[area]);
       if (Number.isFinite(size)) sizes[area] = clampSize(area, size);
     }
-    return withNewPanels({ areas, sizes }, seen);
+    return withNewPanels({ version: LAYOUT_VERSION, areas, sizes }, seen);
   } catch {
     return fallback;
   }

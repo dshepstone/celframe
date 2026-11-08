@@ -12,12 +12,13 @@ Every panel lives in a **tab**, and tabs live in **dock areas** around the canva
 
 ## Panels
 
-| Panel           | Default place       |
-| --------------- | ------------------- |
-| Tool properties | Right, top stack    |
-| Colour          | Right, middle stack |
-| Layers          | Right, bottom stack |
-| Timeline        | Bottom              |
+| Panel           | Default place        |
+| --------------- | -------------------- |
+| Tool properties | Right, top stack     |
+| Colour          | Right, middle stack  |
+| Layers          | Right, bottom stack  |
+| Exposure sheet  | Right, beside Layers |
+| Timeline        | Bottom               |
 
 Each panel appears once. Later panels, such as the exposure sheet and camera, join this list.
 
@@ -46,4 +47,4 @@ Tabs move by dragging with the mouse or pen:
 
 ## Remembering
 
-The arrangement, sizes and active tabs are kept in local storage as a preference of the person using the computer, not in the project. Anything unreadable falls back to the default layout, and unknown panels are dropped.
+When a new version adds a panel or changes where one belongs, stored layouts gain it at its default place. The arrangement, sizes and active tabs are kept in local storage as a preference of the person using the computer, not in the project. Anything unreadable falls back to the default layout, and unknown panels are dropped.

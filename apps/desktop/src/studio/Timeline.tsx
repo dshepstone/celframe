@@ -1,6 +1,7 @@
 import type { MouseEvent, ReactNode } from "react";
 import type { Layer, TimingEdit } from "../backend";
 import { targetLayer, useApp } from "../store";
+import { startScrub } from "./scrub";
 
 const CELL = 22;
 const MIN_FRAMES = 48;
@@ -220,7 +221,9 @@ export function Timeline() {
                   scope="col"
                   style={{ width: CELL, minWidth: CELL }}
                   aria-current={i === current ? "true" : undefined}
-                  className={`relative h-5 cursor-pointer border-l border-border p-0 text-center font-normal ${
+                  data-scrub-frame={i}
+                  onPointerDown={(e) => startScrub(e, "x")}
+                  className={`relative h-5 cursor-ew-resize border-l border-border p-0 text-center font-normal select-none ${
                     i === current
                       ? "bg-accent-muted text-text"
                       : i % 6 === 5

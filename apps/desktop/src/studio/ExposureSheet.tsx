@@ -1,6 +1,18 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { Layer } from "../backend";
 import { targetLayer, useApp } from "../store";
+import { EyeIcon, EyeOffIcon } from "./icons";
+import { startScrub } from "./scrub";
+
+/** Paper colours for the sheet's cells: white with dark ink in both themes. */
+const PAPER = "bg-[#ffffff] text-[#1a1c1f]";
+const PAPER_CURRENT = "bg-[#d9efec] text-[#1a1c1f]";
+const INK_MUTED = "text-[#5d636b]";
+const HOLD_LINE = "bg-[#4a4f57]";
+const RULE_LIGHT = "border-b border-b-[#d4d7dc]";
+const RULE_HALF = "border-b border-b-[#9aa0a8]";
+const RULE_SECOND = "border-b-2 border-b-[#5d636b]";
+const COLUMN_EDGE = "border-r border-r-[#c4c7cc]";
 
 /** Rows past the scene's end, or past the current frame if that's later. */
 const EXTRA_ROWS = 24;
@@ -31,6 +43,7 @@ export function ExposureSheet() {
     setActiveLayer,
     setCurrentFrame,
     editTiming,
+    runCommand,
   } = useApp();
   const [draft, setDraft] = useState("");
   const entry = useRef<HTMLInputElement>(null);
@@ -126,13 +139,36 @@ export function ExposureSheet() {
                   key={layer.id}
                   scope="col"
                   onClick={() => setActiveLayer(layer.id)}
-                  className={`h-6 w-20 min-w-20 max-w-28 cursor-pointer truncate border-r border-b border-border px-1.5 text-left font-medium ${
+                  className={`h-6 w-24 min-w-24 max-w-32 cursor-pointer border-r border-b border-border px-1 text-left font-medium ${
                     layer.id === target?.id
                       ? "bg-accent-muted text-text"
                       : "text-text-muted"
-                  } ${layer.visible ? "" : "opacity-50"}`}
+                  }`}
                 >
-                  {layer.name}
+                  <span className="flex items-center gap-0.5">
+                    <button
+                      type="button"
+                      aria-label={`${layer.visible ? "Hide" : "Show"} ${layer.name}`}
+                      aria-pressed={layer.visible}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void runCommand({
+                          type: "setLayerVisible",
+                          scene: scene.id,
+                          layer: layer.id,
+                          visible: !layer.visible,
+                        });
+                      }}
+                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-text-muted outline-none hover:bg-surface-hover hover:text-text focus-visible:outline-2 focus-visible:outline-focus-ring aria-[pressed=false]:opacity-60"
+                    >
+                      {layer.visible ? <EyeIcon /> : <EyeOffIcon />}
+                    </button>
+                    <span
+                      className={`truncate ${layer.visible ? "" : "opacity-50"}`}
+                    >
+                      {layer.name}
+                    </span>
+                  </span>
                 </th>
               ))}
             </tr>
@@ -141,29 +177,27 @@ export function ExposureSheet() {
             {Array.from({ length: rows }, (_, frame) => {
               const rule =
                 frame % 24 === 23
-                  ? "border-b-2 border-b-text-muted/50"
+                  ? RULE_SECOND
                   : frame % 12 === 11
-                    ? "border-b border-b-text-muted/30"
-                    : "border-b border-b-border";
+                    ? RULE_HALF
+                    : RULE_LIGHT;
               const isCurrent = frame === current;
+              const paper = isCurrent ? PAPER_CURRENT : PAPER;
               return (
-                <tr
-                  key={frame}
-                  className={isCurrent ? "bg-accent-muted/50" : ""}
-                >
+                <tr key={frame}>
                   <th
                     scope="row"
-                    className={`sticky left-0 z-[1] h-5 border-r border-border px-1.5 text-right font-normal ${rule} ${
-                      isCurrent
-                        ? "bg-accent-muted text-text"
-                        : "bg-surface text-text-muted"
+                    data-scrub-frame={frame}
+                    onPointerDown={(e) => startScrub(e, "y")}
+                    className={`sticky left-0 z-[1] h-5 cursor-ns-resize border-r border-r-[#9aa0a8] px-1.5 text-right font-normal select-none ${rule} ${paper} ${
+                      isCurrent ? "font-semibold" : INK_MUTED
                     }`}
                   >
                     <button
                       type="button"
                       aria-label={`Frame ${frame + 1}`}
                       onClick={() => void setCurrentFrame(frame)}
-                      className="w-full text-right outline-none focus-visible:outline-2 focus-visible:outline-focus-ring"
+                      className="w-full cursor-ns-resize text-right outline-none focus-visible:outline-2 focus-visible:outline-focus-ring"
                     >
                       {frame + 1}
                     </button>
@@ -180,7 +214,7 @@ export function ExposureSheet() {
                             ? `${layer.name}, frame ${frame + 1}: drawing ${cell.number}`
                             : undefined
                         }
-                        className={`relative h-5 cursor-cell border-r border-border p-0 text-center ${rule} ${
+                        className={`relative h-5 cursor-cell p-0 text-center ${COLUMN_EDGE} ${rule} ${paper} ${
                           here
                             ? "outline-2 -outline-offset-2 outline-accent"
                             : ""
@@ -189,7 +223,7 @@ export function ExposureSheet() {
                         {here && cell.kind === "hold" ? (
                           <span
                             aria-hidden="true"
-                            className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-text-muted/70"
+                            className={`pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 ${HOLD_LINE}`}
                           />
                         ) : null}
                         {here ? (
@@ -205,14 +239,14 @@ export function ExposureSheet() {
                               setDraft(e.target.value.replace(/[^0-9]/g, ""))
                             }
                             onKeyDown={onKeyDown}
-                            className="h-full w-full bg-transparent text-center text-text outline-none placeholder:text-text"
+                            className="h-full w-full bg-transparent text-center text-[#1a1c1f] outline-none placeholder:text-[#1a1c1f]"
                           />
                         ) : cell.kind === "start" ? (
-                          <span className="text-text">{cell.number}</span>
+                          <span className="font-medium">{cell.number}</span>
                         ) : cell.kind === "hold" ? (
                           <span
                             aria-hidden="true"
-                            className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-text-muted/70"
+                            className={`absolute inset-y-0 left-1/2 w-px -translate-x-1/2 ${HOLD_LINE}`}
                           />
                         ) : null}
                       </td>
