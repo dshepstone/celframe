@@ -20,57 +20,46 @@ import {
   nextShelfName,
   storeShelves,
 } from "./shelves";
+import {
+  type AreaId,
+  type DockLayout,
+  type DropTarget,
+  type PanelId,
+  clampSize,
+  defaultLayout,
+  activate as activateTab,
+  moveTab,
+  parseLayout,
+  resizeStacks as resizeDockStacks,
+  showPanel as showDockPanel,
+} from "./dock/layout";
 
 const THEME_KEY = "celframe.theme";
-const LAYOUT_KEY = "celframe.layout";
-export const SIDE_PANEL_MIN = 220;
-export const SIDE_PANEL_MAX = 420;
-const SIDE_PANEL_DEFAULT = 272;
+const DOCK_KEY = "celframe.dock";
 
-interface Layout {
-  collapsedPanels: string[];
-  sidePanelWidth: number;
-}
-
-/** Panel layout from earlier sessions. Anything unreadable falls back to the default. */
-export function readLayout(stored: string | null): Layout {
-  const fallback = { collapsedPanels: [], sidePanelWidth: SIDE_PANEL_DEFAULT };
-  if (stored === null) return fallback;
+function loadDock(): DockLayout {
   try {
-    const value = JSON.parse(stored) as Partial<Layout>;
-    const width = Number(value.sidePanelWidth);
-    return {
-      collapsedPanels: Array.isArray(value.collapsedPanels)
-        ? value.collapsedPanels.filter(
-            (p): p is string => typeof p === "string",
-          )
-        : [],
-      sidePanelWidth: Number.isFinite(width)
-        ? Math.min(SIDE_PANEL_MAX, Math.max(SIDE_PANEL_MIN, width))
-        : SIDE_PANEL_DEFAULT,
-    };
+    return parseLayout(localStorage.getItem(DOCK_KEY));
   } catch {
-    return fallback;
+    return defaultLayout();
   }
 }
 
-function loadLayout(): Layout {
+function storeDock(layout: DockLayout): void {
   try {
-    return readLayout(localStorage.getItem(LAYOUT_KEY));
-  } catch {
-    return readLayout(null);
-  }
-}
-
-function storeLayout(layout: Layout): void {
-  try {
-    localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout));
+    localStorage.setItem(DOCK_KEY, JSON.stringify(layout));
   } catch {
     // Without storage the layout still works; it just isn't remembered.
   }
 }
 
-const savedLayout = loadLayout();
+/** A tab being dragged, where the pointer is, and where it would land. */
+export interface DockDrag {
+  panel: PanelId;
+  x: number;
+  y: number;
+  target: DropTarget | null;
+}
 
 function readSavedTheme(): ThemeName | null {
   try {
@@ -124,10 +113,10 @@ export interface AppState {
   theme: ThemeName;
   sidePanelOpen: boolean;
   timelineOpen: boolean;
-  /** Side-panel sections that are collapsed to their headers. */
-  collapsedPanels: string[];
-  /** The side panel's width in CSS pixels. */
-  sidePanelWidth: number;
+  /** Where every panel tab is. See docs/specs/docking.md. */
+  dock: DockLayout;
+  /** The tab being dragged, if any. */
+  dockDrag: DockDrag | null;
   paletteOpen: boolean;
   brushWidth: number;
   brushColor: Rgba;
@@ -165,8 +154,18 @@ export interface AppState {
   setTheme: (theme: ThemeName) => void;
   toggleTheme: () => void;
   setSidePanelOpen: (open: boolean) => void;
-  togglePanel: (id: string) => void;
-  setSidePanelWidth: (width: number) => void;
+  moveDockTab: (panel: PanelId, target: DropTarget) => void;
+  activatePanel: (panel: PanelId) => void;
+  showPanel: (panel: PanelId) => void;
+  setAreaSize: (area: AreaId, size: number) => void;
+  resizeStacks: (
+    area: AreaId,
+    index: number,
+    delta: number,
+    length: number,
+  ) => void;
+  resetLayout: () => void;
+  setDockDrag: (drag: DockDrag | null) => void;
   setTimelineOpen: (open: boolean) => void;
   setPaletteOpen: (open: boolean) => void;
   setBrushWidth: (width: number) => void;
@@ -241,6 +240,11 @@ export const useApp = create<AppState>((set, get) => {
     }
   };
 
+  /** Replaces the dock layout and remembers it. */
+  const putDock = (dock: DockLayout) => {
+    storeDock(dock);
+    set({ dock });
+  };
   /** Replaces the shelves and stores them. */
   const putShelves = (shelves: Shelf[], activeShelf = get().activeShelf) => {
     storeShelves(shelves);
@@ -259,8 +263,8 @@ export const useApp = create<AppState>((set, get) => {
     theme: "light",
     sidePanelOpen: true,
     timelineOpen: true,
-    collapsedPanels: savedLayout.collapsedPanels,
-    sidePanelWidth: savedLayout.sidePanelWidth,
+    dock: loadDock(),
+    dockDrag: null,
     paletteOpen: false,
     brushWidth: 10,
     brushColor: [0, 0, 0, 255],
@@ -325,21 +329,27 @@ export const useApp = create<AppState>((set, get) => {
       get().setTheme(get().theme === "dark" ? "light" : "dark");
     },
     setSidePanelOpen: (sidePanelOpen) => set({ sidePanelOpen }),
-    togglePanel: (id) => {
-      const collapsed = get().collapsedPanels;
-      const collapsedPanels = collapsed.includes(id)
-        ? collapsed.filter((p) => p !== id)
-        : [...collapsed, id];
-      set({ collapsedPanels });
-      storeLayout({ collapsedPanels, sidePanelWidth: get().sidePanelWidth });
+    moveDockTab: (panel, target) => putDock(moveTab(get().dock, panel, target)),
+    activatePanel: (panel) => putDock(activateTab(get().dock, panel)),
+    showPanel: (panel) => {
+      putDock(showDockPanel(get().dock, panel));
+      if (panel === "timeline") set({ timelineOpen: true });
+      else set({ sidePanelOpen: true });
     },
-    setSidePanelWidth: (width) => {
-      const sidePanelWidth = Math.round(
-        Math.min(SIDE_PANEL_MAX, Math.max(SIDE_PANEL_MIN, width)),
-      );
-      set({ sidePanelWidth });
-      storeLayout({ collapsedPanels: get().collapsedPanels, sidePanelWidth });
+    setAreaSize: (area, size) => {
+      const dock = get().dock;
+      putDock({
+        ...dock,
+        sizes: { ...dock.sizes, [area]: clampSize(area, size) },
+      });
     },
+    resizeStacks: (area, index, delta, length) =>
+      putDock(resizeDockStacks(get().dock, area, index, delta, length)),
+    resetLayout: () => {
+      putDock(defaultLayout());
+      set({ sidePanelOpen: true, timelineOpen: true });
+    },
+    setDockDrag: (dockDrag) => set({ dockDrag }),
     setTimelineOpen: (timelineOpen) => set({ timelineOpen }),
     setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
     setBrushWidth: (width) =>
