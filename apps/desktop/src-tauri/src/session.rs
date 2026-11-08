@@ -34,7 +34,26 @@ pub struct Session {
     modifiers: Constraints,
     /// The selection shows handles, because the Select tool is active.
     handles_visible: bool,
+    /// The frame every view, tool and timing edit works at, counted from 0.
+    current_frame: u32,
 }
+
+/// A timing edit on the current layer at the current frame. See `docs/specs/timing.md`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum TimingEdit {
+    NewDrawing,
+    Hold { by: i64 },
+    InsertFrame,
+    DeleteFrame,
+}
+
+/// How far past the scene's end the current frame may go, so there's room to keep drawing.
+pub const FRAMES_PAST_END: u32 = 100;
 
 /// A shape being dragged out. Its stroke is added on the first movement that gives it a size.
 struct ShapeDrag {
@@ -84,6 +103,10 @@ pub struct DocumentView {
     pub selection: Vec<StrokeId>,
     /// The box around the selected strokes' centrelines, `[min_x, min_y, max_x, max_y]`.
     pub selection_bounds: Option<[f64; 4]>,
+    /// The current frame, counted from 0.
+    pub current_frame: u32,
+    /// The first scene's length in frames.
+    pub scene_length: u32,
 }
 
 impl Session {
@@ -101,6 +124,7 @@ impl Session {
             select: None,
             modifiers: Constraints::default(),
             handles_visible: false,
+            current_frame: 0,
         }
     }
 
@@ -124,6 +148,12 @@ impl Session {
             dirty: self.history.is_dirty(),
             path: self.path.clone(),
             selection: self.selected_ids(),
+            current_frame: self.current_frame,
+            scene_length: self
+                .project
+                .scenes
+                .first()
+                .map_or(1, celframe_core::timing::scene_length),
             selection_bounds: self
                 .selection
                 .as_ref()
@@ -283,7 +313,8 @@ impl Session {
             return Err("That brush size isn't valid.".to_owned());
         }
         let first = pen::clean(sample).ok_or("That pen position isn't valid.")?;
-        let (scene, layer, drawing) = pen::find_target(&self.project, 0, options.layer)?;
+        let frame = self.current_frame;
+        let (scene, layer, drawing) = pen::find_target(&self.project, frame, options.layer)?;
         if let PenTool::Select {
             lasso,
             scale_widths,
@@ -404,7 +435,7 @@ impl Session {
     }
 
     /// Adds a stroke as one undo step that later appends and reshapes merge into. When no
-    /// drawing is shown at frame 0, a new one is added in the same step.
+    /// drawing is shown at the current frame, a new one is added in the same step.
     fn begin_stroke(
         &mut self,
         scene: SceneId,
@@ -441,7 +472,7 @@ impl Session {
                 commands.push(Command::InsertExposure {
                     scene,
                     layer,
-                    exposure: Exposure::new(0, 1, id),
+                    exposure: Exposure::new(self.current_frame, 1, id),
                 });
                 (id, 0)
             }
@@ -897,14 +928,14 @@ impl Session {
         }
     }
 
-    /// Selects every stroke in a part of the current layer's drawing at frame 0.
+    /// Selects every stroke in a part of the current layer's drawing at the current frame.
     pub fn select_all(
         &mut self,
         layer: Option<LayerId>,
         art: celframe_core::Art,
     ) -> Result<DocumentView, String> {
         self.end_drags();
-        let (scene, layer, drawing) = pen::find_target(&self.project, 0, layer)?;
+        let (scene, layer, drawing) = pen::find_target(&self.project, self.current_frame, layer)?;
         self.selection = drawing.and_then(|drawing| {
             let strokes = select::drawing(&self.project, scene, layer, drawing)?
                 .strokes
@@ -982,6 +1013,76 @@ impl Session {
                     .execute(&mut self.project, command)
                     .map_err(|e| e.to_string())?;
             }
+        }
+        Ok(self.view())
+    }
+}
+
+impl Session {
+    pub fn current_frame(&self) -> u32 {
+        self.current_frame
+    }
+
+    /// Moves to a frame, within the scene and a margin past its end. Ends any drag and clears
+    /// the selection, which belongs to the drawing at the old frame.
+    pub fn set_current_frame(&mut self, frame: u32) -> DocumentView {
+        let length = self
+            .project
+            .scenes
+            .first()
+            .map_or(1, celframe_core::timing::scene_length);
+        let frame = frame.min(length - 1 + FRAMES_PAST_END);
+        if frame != self.current_frame {
+            self.end_drags();
+            self.selection = None;
+            self.current_frame = frame;
+        }
+        self.view()
+    }
+
+    /// Applies a timing edit to a layer, the chosen one or the topmost visible, unlocked one,
+    /// as one undo step. Edits that change nothing add no step.
+    pub fn edit_timing(
+        &mut self,
+        edit: TimingEdit,
+        layer: Option<LayerId>,
+    ) -> Result<DocumentView, String> {
+        use celframe_core::timing;
+        self.end_drags();
+        let frame = self.current_frame;
+        let (scene, layer, _) = pen::find_target(&self.project, frame, layer)?;
+        let target = self
+            .project
+            .scenes
+            .iter()
+            .find(|s| s.id == scene)
+            .and_then(|s| timing::layer_in(s, layer))
+            .ok_or("That layer no longer exists.")?;
+        let commands = match edit {
+            TimingEdit::NewDrawing => {
+                let drawing = Drawing::new();
+                let after = timing::with_new_drawing(&target.exposures, frame, drawing.id);
+                let mut commands = vec![Command::AddDrawing {
+                    scene,
+                    layer,
+                    drawing,
+                    index: target.drawings.len(),
+                }];
+                commands.extend(timing::replace_exposures(scene, target, &after));
+                Some(commands)
+            }
+            TimingEdit::Hold { by } => timing::hold(&target.exposures, frame, by)
+                .map(|after| timing::replace_exposures(scene, target, &after)),
+            TimingEdit::InsertFrame => timing::insert_frames(&target.exposures, frame, 1)
+                .map(|after| timing::replace_exposures(scene, target, &after)),
+            TimingEdit::DeleteFrame => timing::delete_frames(&target.exposures, frame, 1)
+                .map(|after| timing::replace_exposures(scene, target, &after)),
+        };
+        if let Some(commands) = commands {
+            self.selection = None;
+            self.history
+                .execute(&mut self.project, Command::Batch { commands })
+                .map_err(|e| e.to_string())?;
         }
         Ok(self.view())
     }
@@ -1638,6 +1739,67 @@ mod tests {
         assert_eq!(session.overlay(0.2).len(), 1 + 16 + 3);
         session.set_handles_visible(false);
         assert_eq!(session.overlay(0.2).len(), 1);
+    }
+
+    #[test]
+    fn strokes_go_into_the_drawing_at_the_current_frame() {
+        let mut session = Session::new(Project::starter("A"));
+        session.set_current_frame(5);
+        session
+            .pen_down(sample(0.0, 0.0), 0.1, PenOptions::default())
+            .unwrap();
+        session.pen_move(&[sample(20.0, 0.0)]).unwrap();
+        let view = session.pen_up().unwrap();
+        let layer = &view.project.scenes[0].layers[0];
+        assert_eq!(layer.drawings.len(), 2, "a new drawing for frame 6");
+        assert_eq!(layer.drawing_at(5).unwrap().strokes.len(), 1);
+        assert!(layer.drawing_at(0).unwrap().strokes.is_empty());
+        assert_eq!(view.scene_length, 6);
+        session.undo().unwrap();
+        assert_eq!(session.view().project.scenes[0].layers[0].drawings.len(), 1);
+    }
+
+    #[test]
+    fn timing_edits_change_exposures_as_single_steps() {
+        let mut session = Session::new(Project::starter("A"));
+        let hold = session
+            .edit_timing(TimingEdit::Hold { by: 3 }, None)
+            .unwrap();
+        assert_eq!(hold.scene_length, 4);
+        session.set_current_frame(2);
+        let view = session.edit_timing(TimingEdit::NewDrawing, None).unwrap();
+        let layer = &view.project.scenes[0].layers[0];
+        let starts: Vec<_> = layer
+            .exposures
+            .iter()
+            .map(|e| (e.start_frame, e.length))
+            .collect();
+        assert_eq!(starts, [(0, 2), (2, 1), (3, 1)]);
+        session.edit_timing(TimingEdit::InsertFrame, None).unwrap();
+        session.edit_timing(TimingEdit::DeleteFrame, None).unwrap();
+        session.undo().unwrap();
+        session.undo().unwrap();
+        session.undo().unwrap();
+        let back = session.view();
+        let exposures = &back.project.scenes[0].layers[0].exposures;
+        assert_eq!(exposures.len(), 1, "each edit was one step");
+        assert_eq!(exposures[0].length, 4);
+        // Holding an empty frame adds no step.
+        session.set_current_frame(50);
+        let before = session.view().can_redo;
+        session
+            .edit_timing(TimingEdit::Hold { by: 1 }, None)
+            .unwrap();
+        assert_eq!(session.view().can_redo, before);
+    }
+
+    #[test]
+    fn the_current_frame_stays_near_the_scene() {
+        let mut session = Session::new(Project::starter("A"));
+        assert_eq!(
+            session.set_current_frame(10_000).current_frame,
+            FRAMES_PAST_END
+        );
     }
 
     #[test]

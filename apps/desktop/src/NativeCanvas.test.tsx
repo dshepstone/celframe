@@ -18,6 +18,8 @@ vi.mock("./backend", () => ({
         path: null,
         selection: [],
         selectionBounds: null,
+        currentFrame: 0,
+        sceneLength: 1,
       }),
     ),
     getRecovery: vi.fn(() => Promise.resolve(null)),

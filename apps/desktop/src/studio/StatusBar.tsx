@@ -25,7 +25,9 @@ export function StatusBar() {
             {scene.width} × {scene.height}
           </span>
           <span>{scene.frameRate} fps</span>
-          <span>Frame 1</span>
+          <span>
+            Frame {(doc?.currentFrame ?? 0) + 1} of {doc?.sceneLength ?? 1}
+          </span>
           <span>
             Drawing on: {layer ? layer.name : "no visible, unlocked layer"}
           </span>

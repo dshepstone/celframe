@@ -62,7 +62,8 @@ fn redraw(app: &AppHandle) {
         // The frame's dimming and gate go under the selection's outlines and handles.
         let mut overlay = canvas::frame_overlay(scene, mode, pixel, layout.backdrop);
         overlay.extend(session.overlay(pixel));
-        let strokes = canvas::view_strokes(scene, mode, canvas.drawing_layer());
+        let frame = session.current_frame();
+        let strokes = canvas::view_strokes(scene, mode, canvas.drawing_layer(), frame);
         canvas.render(scene, strokes.into_iter(), &overlay);
     }
 }
@@ -140,6 +141,27 @@ fn delete_selection(
     state: State<'_, SharedSession>,
 ) -> Result<DocumentView, String> {
     let result = lock(&state)?.delete_selection();
+    redrawn(&app, result)
+}
+
+#[tauri::command]
+fn set_current_frame(
+    app: AppHandle,
+    state: State<'_, SharedSession>,
+    frame: u32,
+) -> Result<DocumentView, String> {
+    let view = lock(&state)?.set_current_frame(frame);
+    redrawn(&app, Ok(view))
+}
+
+#[tauri::command]
+fn edit_timing(
+    app: AppHandle,
+    state: State<'_, SharedSession>,
+    edit: session::TimingEdit,
+    layer: Option<celframe_core::LayerId>,
+) -> Result<DocumentView, String> {
+    let result = lock(&state)?.edit_timing(edit, layer);
     redrawn(&app, result)
 }
 
@@ -676,7 +698,9 @@ pub fn run() {
             nudge_selection,
             edit_selection,
             set_handles_visible,
-            set_view_mode
+            set_view_mode,
+            set_current_frame,
+            edit_timing
         ])
         .build(tauri::generate_context!())
         .expect("the app failed to start")

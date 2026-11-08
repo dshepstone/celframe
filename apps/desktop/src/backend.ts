@@ -102,7 +102,18 @@ export interface DocumentView {
   selection: string[];
   /** The box around the selection's centrelines: [minX, minY, maxX, maxY]. */
   selectionBounds: [number, number, number, number] | null;
+  /** The current frame, counted from 0. */
+  currentFrame: number;
+  /** The first scene's length in frames. */
+  sceneLength: number;
 }
+
+/** A timing edit at the current frame. See docs/specs/timing.md. */
+export type TimingEdit =
+  | { type: "newDrawing" }
+  | { type: "hold"; by: number }
+  | { type: "insertFrame" }
+  | { type: "deleteFrame" };
 
 /** The centre's views. See docs/specs/views.md. */
 export type ViewMode = "drawing" | "camera";
@@ -188,6 +199,10 @@ export const backend = {
   deleteSelection: () => invoke<DocumentView>("delete_selection"),
   nudgeSelection: (dx: number, dy: number) =>
     invoke<DocumentView>("nudge_selection", { dx, dy }),
+  setCurrentFrame: (frame: number) =>
+    invoke<DocumentView>("set_current_frame", { frame }),
+  editTiming: (edit: TimingEdit, layer: string | null) =>
+    invoke<DocumentView>("edit_timing", { edit, layer }),
   /** Shows the Drawing or Camera view. Null while the canvas isn't ready. */
   setViewMode: (mode: ViewMode, layer: string | null) =>
     invoke<ViewInfo | null>("set_view_mode", { mode, layer }),

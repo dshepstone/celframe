@@ -21,7 +21,15 @@ import {
 } from "./studio/icons";
 
 export type ActionGroup =
-  "Tools" | "Shapes" | "Edit" | "Selection" | "Art" | "View" | "Layer" | "File";
+  | "Tools"
+  | "Shapes"
+  | "Edit"
+  | "Selection"
+  | "Art"
+  | "View"
+  | "Layer"
+  | "Timing"
+  | "File";
 
 /** Something the user can do, from the command palette or a shelf. See docs/specs/shelves.md. */
 export interface Action {
@@ -53,6 +61,10 @@ export function useActions(): Action[] {
     setTimelineOpen,
     setTool,
     setViewMode,
+    setCurrentFrame,
+    togglePlayback,
+    playing,
+    editTiming,
     setShapeKind,
     setArt,
     toggleArt,
@@ -267,6 +279,71 @@ export function useActions(): Action[] {
       shortcut: "L",
       enabled: true,
       run: toggleArt,
+    },
+    {
+      id: "frame.previous",
+      label: "Previous frame",
+      group: "Timing",
+      shortcut: "Alt+←",
+      enabled: hasDoc,
+      run: () =>
+        void setCurrentFrame(Math.max(0, (doc?.currentFrame ?? 0) - 1)),
+    },
+    {
+      id: "frame.next",
+      label: "Next frame",
+      group: "Timing",
+      shortcut: "Alt+→",
+      enabled: hasDoc,
+      run: () => void setCurrentFrame((doc?.currentFrame ?? 0) + 1),
+    },
+    {
+      id: "playback",
+      label: playing ? "Stop playback" : "Play",
+      group: "Timing",
+      shortcut: "Shift+Space",
+      enabled: hasDoc,
+      run: togglePlayback,
+    },
+    {
+      id: "timing.new-drawing",
+      label: "New drawing",
+      group: "Timing",
+      shortcut: "Alt+N",
+      enabled: hasDoc,
+      run: () => void editTiming({ type: "newDrawing" }),
+    },
+    {
+      id: "timing.hold-longer",
+      label: "Hold longer",
+      group: "Timing",
+      shortcut: "Alt+=",
+      enabled: hasDoc,
+      run: () => void editTiming({ type: "hold", by: 1 }),
+    },
+    {
+      id: "timing.hold-shorter",
+      label: "Hold shorter",
+      group: "Timing",
+      shortcut: "Alt+-",
+      enabled: hasDoc,
+      run: () => void editTiming({ type: "hold", by: -1 }),
+    },
+    {
+      id: "timing.insert-frame",
+      label: "Insert frame",
+      group: "Timing",
+      shortcut: "Alt+I",
+      enabled: hasDoc,
+      run: () => void editTiming({ type: "insertFrame" }),
+    },
+    {
+      id: "timing.delete-frame",
+      label: "Delete frame",
+      group: "Timing",
+      shortcut: "Alt+D",
+      enabled: hasDoc,
+      run: () => void editTiming({ type: "deleteFrame" }),
     },
     {
       id: "view.drawing",

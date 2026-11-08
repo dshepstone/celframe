@@ -86,8 +86,41 @@ export function App() {
   // Single-key shortcuts for tools and the view. Ignored while typing.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.ctrlKey || event.metaKey || event.altKey) return;
       if (isTextField(event.target)) return;
+      // Frames and timing, on Alt. See docs/specs/timing.md.
+      if (event.altKey && !event.ctrlKey && !event.metaKey) {
+        const state = useApp.getState();
+        const frame = state.document?.currentFrame ?? 0;
+        const timing: Record<string, () => void> = {
+          arrowleft: () => void state.setCurrentFrame(Math.max(0, frame - 1)),
+          arrowright: () => void state.setCurrentFrame(frame + 1),
+          n: () => void state.editTiming({ type: "newDrawing" }),
+          "=": () => void state.editTiming({ type: "hold", by: 1 }),
+          "+": () => void state.editTiming({ type: "hold", by: 1 }),
+          "-": () => void state.editTiming({ type: "hold", by: -1 }),
+          i: () => void state.editTiming({ type: "insertFrame" }),
+          d: () => void state.editTiming({ type: "deleteFrame" }),
+        };
+        const run = timing[event.key.toLowerCase()];
+        if (run) {
+          event.preventDefault();
+          run();
+        }
+        return;
+      }
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.key === " " && event.shiftKey) {
+        event.preventDefault();
+        if (!event.repeat) useApp.getState().togglePlayback();
+        return;
+      }
+      if (event.key === "Home" || event.key === "End") {
+        event.preventDefault();
+        const state = useApp.getState();
+        const last = (state.document?.sceneLength ?? 1) - 1;
+        void state.setCurrentFrame(event.key === "Home" ? 0 : last);
+        return;
+      }
       if (event.key === " ") {
         event.preventDefault();
         if (!event.repeat) setSpaceHeld(true);

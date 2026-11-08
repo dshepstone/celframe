@@ -33,6 +33,8 @@ const view = (dirty: boolean): DocumentView => ({
   path: null,
   selection: [],
   selectionBounds: null,
+  currentFrame: 0,
+  sceneLength: 1,
 });
 
 const canvas = () => screen.getByRole("main", { name: "Canvas" });
