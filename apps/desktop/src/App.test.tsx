@@ -31,6 +31,8 @@ vi.mock("./backend", () => ({
     editSelection: vi.fn(),
     setHandlesVisible: vi.fn(() => Promise.resolve()),
     setViewMode: vi.fn(() => Promise.resolve(null)),
+    setCurrentFrame: vi.fn(),
+    editTiming: vi.fn(),
     onCloseRequested: vi.fn(() => Promise.resolve(() => undefined)),
   },
 }));
@@ -268,6 +270,75 @@ describe("App shell", () => {
 
     await userEvent.keyboard("{Control>}2{/Control}");
     expect(backend.setViewMode).toHaveBeenLastCalledWith("camera", "l1");
+  });
+
+  it("moves through frames and edits timing from the timeline and keyboard", async () => {
+    const at = (currentFrame: number) =>
+      view({ currentFrame, sceneLength: 12 });
+    vi.mocked(backend.getDocument).mockResolvedValue(at(0));
+    vi.mocked(backend.setCurrentFrame).mockImplementation((frame) =>
+      Promise.resolve(at(frame)),
+    );
+    vi.mocked(backend.editTiming).mockResolvedValue(at(0));
+    render(<App />);
+    await screen.findByText("Bouncing ball");
+    const timeline = within(screen.getByRole("region", { name: "Timeline" }));
+
+    await userEvent.click(
+      timeline.getByRole("button", { name: "Go to frame 5" }),
+    );
+    expect(backend.setCurrentFrame).toHaveBeenLastCalledWith(4);
+    await waitFor(() =>
+      expect(
+        timeline.getByRole("status", { name: "Current frame" }).textContent,
+      ).toContain("Frame 5"),
+    );
+    await userEvent.keyboard("{Alt>}{ArrowRight}{/Alt}");
+    expect(backend.setCurrentFrame).toHaveBeenLastCalledWith(5);
+    await userEvent.keyboard("{End}");
+    expect(backend.setCurrentFrame).toHaveBeenLastCalledWith(11);
+    await userEvent.keyboard("{Home}");
+    expect(backend.setCurrentFrame).toHaveBeenLastCalledWith(0);
+
+    await userEvent.keyboard("{Alt>}n{/Alt}");
+    expect(backend.editTiming).toHaveBeenLastCalledWith(
+      { type: "newDrawing" },
+      null,
+    );
+    await userEvent.click(
+      timeline.getByRole("button", { name: "Hold longer" }),
+    );
+    expect(backend.editTiming).toHaveBeenLastCalledWith(
+      { type: "hold", by: 1 },
+      null,
+    );
+  });
+
+  it("plays at the frame rate, looping, and stops on an edit", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const at = (currentFrame: number) => view({ currentFrame, sceneLength: 3 });
+    vi.mocked(backend.getDocument).mockResolvedValue(at(1));
+    vi.mocked(backend.setCurrentFrame).mockImplementation((frame) =>
+      Promise.resolve(at(frame)),
+    );
+    vi.mocked(backend.editTiming).mockResolvedValue(at(0));
+    render(<App />);
+    await screen.findByText("Bouncing ball");
+    act(() => useApp.getState().togglePlayback());
+    expect(useApp.getState().playing).toBe(true);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2 * (1000 / 24) + 1);
+    });
+    // From frame 2 of 3: on to frame 3, then wrap to frame 1.
+    const frames = vi
+      .mocked(backend.setCurrentFrame)
+      .mock.calls.map(([f]) => f);
+    expect(frames.slice(0, 2)).toEqual([2, 0]);
+    await act(async () => {
+      await useApp.getState().editTiming({ type: "insertFrame" });
+    });
+    expect(useApp.getState().playing).toBe(false);
+    vi.useRealTimers();
   });
 
   it("cancels a tab drag with Escape", async () => {

@@ -5,6 +5,7 @@ mod history;
 mod ids;
 mod model;
 mod schema;
+pub mod timing;
 
 pub use command::{Command, CommandError};
 pub use history::History;

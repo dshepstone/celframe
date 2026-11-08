@@ -28,16 +28,21 @@ const GATE_WIDTH: f64 = 1.5;
 const GUIDE_COLOR: [u8; 4] = [128, 128, 128, 140];
 const OUTSIDE_DIM: f64 = 0.65;
 
-/// The strokes a view shows, bottom first. The Drawing view shows the drawing on `layer`, or
-/// on the topmost visible layer when that's None or no longer exists.
-pub fn view_strokes(scene: &Scene, mode: ViewMode, layer: Option<LayerId>) -> Vec<&Stroke> {
+/// The strokes a view shows at `frame`, bottom first. The Drawing view shows the drawing on
+/// `layer`, or on the topmost visible layer when that's None or no longer exists.
+pub fn view_strokes(
+    scene: &Scene,
+    mode: ViewMode,
+    layer: Option<LayerId>,
+    frame: u32,
+) -> Vec<&Stroke> {
     match mode {
-        ViewMode::Camera => scene.visible_strokes(0).collect(),
+        ViewMode::Camera => scene.visible_strokes(frame).collect(),
         ViewMode::Drawing => {
             let chosen = layer.and_then(|id| scene.layers.iter().find(|l| l.id == id));
             let shown = chosen.or_else(|| scene.layers.iter().rev().find(|l| l.visible));
             shown
-                .and_then(|l| l.drawing_at(0))
+                .and_then(|l| l.drawing_at(frame))
                 .map_or_else(Vec::new, |d| d.strokes_in_draw_order().collect())
         }
     }
@@ -404,26 +409,26 @@ mod tests {
         let mut scene = two_layers();
         let bottom = scene.layers[0].id;
         assert_eq!(
-            xs(&view_strokes(&scene, ViewMode::Camera, None)),
+            xs(&view_strokes(&scene, ViewMode::Camera, None, 0)),
             [1.0, 2.0]
         );
         assert_eq!(
-            xs(&view_strokes(&scene, ViewMode::Drawing, Some(bottom))),
+            xs(&view_strokes(&scene, ViewMode::Drawing, Some(bottom), 0)),
             [1.0]
         );
         assert_eq!(
-            xs(&view_strokes(&scene, ViewMode::Drawing, None)),
+            xs(&view_strokes(&scene, ViewMode::Drawing, None, 0)),
             [2.0],
             "topmost"
         );
         scene.layers[1].visible = false;
         assert_eq!(
-            xs(&view_strokes(&scene, ViewMode::Drawing, None)),
+            xs(&view_strokes(&scene, ViewMode::Drawing, None, 0)),
             [1.0],
             "visible only"
         );
         let gone = Some(LayerId::new());
-        assert_eq!(xs(&view_strokes(&scene, ViewMode::Drawing, gone)), [1.0]);
+        assert_eq!(xs(&view_strokes(&scene, ViewMode::Drawing, gone, 0)), [1.0]);
     }
 
     #[test]

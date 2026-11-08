@@ -13,6 +13,7 @@ import {
   type ViewChange,
   type ViewInfo,
   type ViewMode,
+  type TimingEdit,
 } from "./backend";
 import {
   type Shelf,
@@ -36,6 +37,9 @@ import {
 } from "./dock/layout";
 
 const THEME_KEY = "celframe.theme";
+
+/** The playback timer, while playing. */
+let playbackTimer: ReturnType<typeof setInterval> | null = null;
 const DOCK_KEY = "celframe.dock";
 
 function loadDock(): DockLayout {
@@ -178,6 +182,15 @@ export interface AppState {
   setTool: (tool: Tool) => void;
   /** Which centre view is showing. */
   viewMode: ViewMode;
+  /** Playback is running. */
+  playing: boolean;
+  /** Playback wraps from the last frame to the first. */
+  loop: boolean;
+  setCurrentFrame: (frame: number) => Promise<void>;
+  togglePlayback: () => void;
+  stopPlayback: () => void;
+  setLoop: (loop: boolean) => void;
+  editTiming: (edit: TimingEdit) => Promise<void>;
   setViewMode: (mode: ViewMode) => Promise<void>;
   /** How dragging from empty space selects with the Select tool. */
   selectMode: "box" | "lasso";
@@ -305,8 +318,14 @@ export const useApp = create<AppState>((set, get) => {
         set({ error: String(error) });
       }
     },
-    undo: () => sync(backend.undo()).then(() => undefined),
-    redo: () => sync(backend.redo()).then(() => undefined),
+    undo: () => {
+      get().stopPlayback();
+      return sync(backend.undo()).then(() => undefined);
+    },
+    redo: () => {
+      get().stopPlayback();
+      return sync(backend.redo()).then(() => undefined);
+    },
     requestFileAction: async (action) => {
       if (get().document?.dirty) {
         set({ pendingAction: action });
@@ -372,6 +391,7 @@ export const useApp = create<AppState>((set, get) => {
       }
     },
     runCommand: async (command) => {
+      get().stopPlayback();
       await sync(backend.executeCommand(command));
       // A removed layer can't stay chosen.
       const layers = get().document?.project.scenes[0]?.layers ?? [];
@@ -387,6 +407,7 @@ export const useApp = create<AppState>((set, get) => {
       }
     },
     setTool: (tool) => {
+      get().stopPlayback();
       if ((tool === "select") !== (get().tool === "select")) {
         // Handles show only with the Select tool. Outside the desktop app this does nothing.
         Promise.resolve()
@@ -396,6 +417,47 @@ export const useApp = create<AppState>((set, get) => {
       set({ tool });
     },
     viewMode: "camera",
+    playing: false,
+    loop: true,
+    setCurrentFrame: async (frame) => {
+      if (!get().document) return;
+      await sync(backend.setCurrentFrame(Math.max(0, Math.round(frame))));
+    },
+    togglePlayback: () => {
+      if (get().playing) {
+        get().stopPlayback();
+        return;
+      }
+      const doc = get().document;
+      if (!doc) return;
+      const fps = doc.project.scenes[0]?.frameRate ?? 24;
+      set({ playing: true });
+      playbackTimer = setInterval(() => {
+        const state = get();
+        const current = state.document;
+        if (!state.playing || !current) return;
+        const next = current.currentFrame + 1;
+        if (next >= current.sceneLength) {
+          if (!state.loop) {
+            state.stopPlayback();
+            return;
+          }
+          void state.setCurrentFrame(0);
+        } else {
+          void state.setCurrentFrame(next);
+        }
+      }, 1000 / fps);
+    },
+    stopPlayback: () => {
+      if (playbackTimer !== null) clearInterval(playbackTimer);
+      playbackTimer = null;
+      set({ playing: false });
+    },
+    setLoop: (loop) => set({ loop }),
+    editTiming: async (edit) => {
+      get().stopPlayback();
+      await sync(backend.editTiming(edit, get().activeLayer));
+    },
     setViewMode: async (viewMode) => {
       set({ viewMode });
       try {
