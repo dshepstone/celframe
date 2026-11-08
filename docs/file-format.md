@@ -1,6 +1,6 @@
 # The .celf file format
 
-This is the open specification of Celframe's project format. It describes schema version 2.
+This is the open specification of Celframe's project format. It describes schema version 3.
 
 ## Container
 
@@ -21,7 +21,7 @@ A `.celf` file is a standard zip archive. Anyone can open it with ordinary zip t
 
 ```json
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "id": "0190f0a0-0000-7000-8000-000000000001",
   "name": "Bouncing ball",
   "scenes": ["0190f0a0-0000-7000-8000-000000000002"]
@@ -50,6 +50,7 @@ A `.celf` file is a standard zip archive. Anyone can open it with ordinary zip t
       "name": "Layer 1",
       "visible": true,
       "locked": false,
+      "opacity": { "value": 1.0, "keys": [] },
       "drawings": [
         {
           "id": "0190f0a0-0000-7000-8000-000000000004",
@@ -89,6 +90,7 @@ A reader must reject a file that breaks any of these rules. Celframe also refuse
 - `pressure` is from 0.0 to 1.0.
 - `color` is straight RGBA, with 8 bits per channel.
 - `art` is `"line"` or `"colour"`.
+- A layer's `opacity` has a base `value` and `keys`, each `{ "frame", "value", "interpolation" }` with interpolation `"linear"`, `"ease"` or `"step"`. Values are from 0 to 1, and keys are sorted by frame with no two at the same frame. See [keyframes](specs/keyframes.md).
 - Exposures are sorted by `startFrame`, don't overlap, last at least 1 frame, and use a drawing on the same layer.
 
 Undo history and view state, such as zoom, aren't stored.
@@ -100,7 +102,8 @@ Undo history and view state, such as zoom, aren't stored.
 - Version 0 or a missing version is invalid.
 - Any change to saved data raises the version and adds a migration and a round-trip test.
 
-| Version | Changes                                                            |
-| ------- | ------------------------------------------------------------------ |
-| 1       | First version                                                      |
-| 2       | Adds `art` to every stroke. Upgrading makes every stroke line art. |
+| Version | Changes                                                                                       |
+| ------- | --------------------------------------------------------------------------------------------- |
+| 1       | First version                                                                                 |
+| 2       | Adds `art` to every stroke. Upgrading makes every stroke line art.                            |
+| 3       | Adds keyable `opacity` to every layer. Upgrading makes every layer fully opaque with no keys. |

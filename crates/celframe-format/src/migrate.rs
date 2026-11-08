@@ -19,7 +19,23 @@ pub struct RawDocument {
 pub type Migration = fn(&mut RawDocument) -> Result<(), String>;
 
 /// Index 0 upgrades version 1 to 2, index 1 upgrades 2 to 3, and so on.
-pub(crate) const MIGRATIONS: &[Migration] = &[v1_to_v2];
+pub(crate) const MIGRATIONS: &[Migration] = &[v1_to_v2, v2_to_v3];
+
+/// Version 3 adds keyable `opacity` to every layer. Layers saved before it are fully opaque.
+fn v2_to_v3(document: &mut RawDocument) -> Result<(), String> {
+    for scene in document.scenes.values_mut() {
+        for layer in list(scene, "layers")? {
+            layer
+                .as_object_mut()
+                .ok_or("a layer isn't an object")?
+                .insert(
+                    "opacity".to_owned(),
+                    serde_json::json!({ "value": 1.0, "keys": [] }),
+                );
+        }
+    }
+    Ok(())
+}
 
 /// Version 2 adds `art` to every stroke. Strokes saved before it existed are line art.
 fn v1_to_v2(document: &mut RawDocument) -> Result<(), String> {

@@ -487,6 +487,119 @@ describe("App shell", () => {
     expect(useApp.getState().onion.enabled).toBe(false);
   });
 
+  it("keys layer opacity and moves keys along the timeline", async () => {
+    const keyed = (
+      keys: { frame: number; value: number }[],
+      currentFrame = 0,
+    ) =>
+      view({
+        currentFrame,
+        sceneLength: 12,
+        project: {
+          id: "p",
+          name: "Bouncing ball",
+          scenes: [
+            scene({
+              layers: [
+                layer("l1", {
+                  name: "Layer 1",
+                  opacity: {
+                    value: 1,
+                    keys: keys.map((k) => ({
+                      ...k,
+                      interpolation: "linear" as const,
+                    })),
+                  },
+                }),
+              ],
+            }),
+          ],
+        },
+      });
+    vi.mocked(backend.getDocument).mockResolvedValue(keyed([]));
+    vi.mocked(backend.executeCommand).mockResolvedValue(keyed([]));
+    render(<App />);
+    await screen.findByText("Bouncing ball");
+    const opacity = within(
+      screen.getByRole("group", { name: "Layer 1 opacity" }),
+    );
+
+    // Without keys, a new value changes the base value.
+    const percent = opacity.getByRole("spinbutton", {
+      name: "Opacity percent",
+    });
+    fireEvent.change(percent, { target: { value: "40" } });
+    fireEvent.blur(percent);
+    expect(backend.executeCommand).toHaveBeenLastCalledWith({
+      type: "setBaseValue",
+      scene: "s",
+      layer: "l1",
+      property: "opacity",
+      value: 0.4,
+    });
+
+    await userEvent.click(
+      opacity.getByRole("button", { name: "Set opacity key" }),
+    );
+    expect(backend.executeCommand).toHaveBeenLastCalledWith({
+      type: "setKey",
+      scene: "s",
+      layer: "l1",
+      property: "opacity",
+      key: { frame: 0, value: 1, interpolation: "ease" },
+    });
+
+    // With keys at frames 1 and 11, frame 6 shows halfway, and the timeline has diamonds.
+    act(() => {
+      useApp.setState({
+        document: keyed(
+          [
+            { frame: 0, value: 0 },
+            { frame: 10, value: 1 },
+          ],
+          5,
+        ),
+      });
+    });
+    expect((percent as HTMLInputElement).value).toBe("50");
+    const timeline = within(screen.getByRole("region", { name: "Timeline" }));
+    const diamond = timeline.getByRole("button", {
+      name: "Opacity key at frame 11",
+    });
+    const target = timeline
+      .getByRole("row", { name: "Layer 1 keys" })
+      .querySelector('[data-key-frame="7"]');
+    fireEvent.pointerDown(diamond, { button: 0 });
+    document.elementsFromPoint = () => (target ? [target] : []);
+    act(() => {
+      window.dispatchEvent(
+        new MouseEvent("pointermove", { clientX: 10, clientY: 10 }),
+      );
+    });
+    act(() => {
+      window.dispatchEvent(new MouseEvent("pointerup"));
+    });
+    expect(backend.executeCommand).toHaveBeenLastCalledWith({
+      type: "batch",
+      commands: [
+        {
+          type: "removeKey",
+          scene: "s",
+          layer: "l1",
+          property: "opacity",
+          frame: 10,
+        },
+        {
+          type: "setKey",
+          scene: "s",
+          layer: "l1",
+          property: "opacity",
+          key: { frame: 7, value: 1, interpolation: "linear" },
+        },
+      ],
+    });
+  });
+
   it("cancels a tab drag with Escape", async () => {
     render(<App />);
     await screen.findByText("Bouncing ball");

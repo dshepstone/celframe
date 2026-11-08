@@ -36,6 +36,11 @@ pub(crate) fn validate(project: &Project) -> Result<(), FormatError> {
 }
 
 fn validate_layer(layer: &Layer) -> Result<(), FormatError> {
+    if !layer.opacity.is_valid(0.0..=1.0) {
+        return Err(invalid(
+            "a layer's opacity must be from 0 to 1, with keys in frame order",
+        ));
+    }
     let mut drawing_ids = HashSet::new();
     for drawing in &layer.drawings {
         if !drawing_ids.insert(drawing.id) {

@@ -1,6 +1,8 @@
 //! The native canvas: draws the open scene into the main window, under the transparent webview.
 //! See ADR-0001 and `docs/specs/canvas-rendering.md`.
 
+use std::borrow::Cow;
+
 use celframe_core::{Art, LayerId, Scene, Stroke, StrokeId, StrokeSample};
 use celframe_render::{Canvas, Paper, RenderError, Renderer, View};
 use serde::Deserialize;
@@ -148,24 +150,46 @@ const GATE_WIDTH: f64 = 1.5;
 const GUIDE_COLOR: [u8; 4] = [128, 128, 128, 140];
 const OUTSIDE_DIM: f64 = 0.65;
 
-/// The strokes a view shows at `frame`, bottom first. The Drawing view shows the drawing on
-/// `layer`, or on the topmost visible layer when that's None or no longer exists.
+/// The strokes a view shows at `frame`, bottom first, with each layer's opacity at that frame
+/// applied. The Drawing view shows the drawing on `layer`, or on the topmost visible layer
+/// when that's None or no longer exists.
 pub fn view_strokes(
     scene: &Scene,
     mode: ViewMode,
     layer: Option<LayerId>,
     frame: u32,
-) -> Vec<&Stroke> {
-    match mode {
-        ViewMode::Camera => scene.visible_strokes(frame).collect(),
+) -> Vec<Cow<'_, Stroke>> {
+    let layers: Vec<&celframe_core::Layer> = match mode {
+        ViewMode::Camera => scene.layers.iter().filter(|l| l.visible).collect(),
         ViewMode::Drawing => {
             let chosen = layer.and_then(|id| scene.layers.iter().find(|l| l.id == id));
-            let shown = chosen.or_else(|| scene.layers.iter().rev().find(|l| l.visible));
-            shown
-                .and_then(|l| l.drawing_at(frame))
-                .map_or_else(Vec::new, |d| d.strokes_in_draw_order().collect())
+            chosen
+                .or_else(|| scene.layers.iter().rev().find(|l| l.visible))
+                .into_iter()
+                .collect()
+        }
+    };
+    let mut strokes = Vec::new();
+    for layer in layers {
+        let opacity = layer.opacity.at(frame).clamp(0.0, 1.0);
+        if opacity <= 0.0 {
+            continue;
+        }
+        let drawn = layer
+            .drawing_at(frame)
+            .into_iter()
+            .flat_map(|d| d.strokes_in_draw_order());
+        for stroke in drawn {
+            strokes.push(if opacity >= 1.0 {
+                Cow::Borrowed(stroke)
+            } else {
+                let mut faded = stroke.clone();
+                faded.color[3] = (f64::from(stroke.color[3]) * opacity).round() as u8;
+                Cow::Owned(faded)
+            });
         }
     }
+    strokes
 }
 
 fn stroke_through(points: &[[f64; 2]], width: f64, color: [u8; 4]) -> Stroke {
@@ -534,7 +558,7 @@ mod tests {
         project.scenes.remove(0)
     }
 
-    fn xs(strokes: &[&Stroke]) -> Vec<f64> {
+    fn xs(strokes: &[Cow<'_, Stroke>]) -> Vec<f64> {
         strokes.iter().map(|s| s.samples[0].x).collect()
     }
 
@@ -582,6 +606,34 @@ mod tests {
                 .unwrap();
         }
         (project.scenes.remove(0), xs)
+    }
+
+    #[test]
+    fn layer_opacity_at_the_frame_fades_what_the_layer_draws() {
+        let mut scene = two_layers();
+        // Both drawings hold for 20 frames.
+        for layer in &mut scene.layers {
+            layer.exposures[0].length = 20;
+        }
+        scene.layers[0].opacity.set_key(celframe_core::Key {
+            frame: 0,
+            value: 0.0,
+            interpolation: celframe_core::Interpolation::Linear,
+        });
+        scene.layers[0].opacity.set_key(celframe_core::Key {
+            frame: 10,
+            value: 1.0,
+            interpolation: celframe_core::Interpolation::Linear,
+        });
+        let at = |frame| -> Vec<(f64, u8)> {
+            view_strokes(&scene, ViewMode::Camera, None, frame)
+                .iter()
+                .map(|s| (s.samples[0].x, s.color[3]))
+                .collect()
+        };
+        assert_eq!(at(0), [(2.0, 255)], "fully transparent layers draw nothing");
+        assert_eq!(at(5), [(1.0, 128), (2.0, 255)]);
+        assert_eq!(at(10), [(1.0, 255), (2.0, 255)]);
     }
 
     #[test]

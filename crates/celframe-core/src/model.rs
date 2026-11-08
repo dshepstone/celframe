@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::animated::Animated;
 use crate::ids::{DrawingId, LayerId, ProjectId, SceneId, StrokeId};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -84,6 +85,8 @@ pub struct Layer {
     pub drawings: Vec<Drawing>,
     /// Sorted by start frame, with no overlaps.
     pub exposures: Vec<Exposure>,
+    /// From 0 to 1, multiplying everything the layer draws. Keyable.
+    pub opacity: Animated,
 }
 
 impl Layer {
@@ -95,6 +98,7 @@ impl Layer {
             locked: false,
             drawings: Vec::new(),
             exposures: Vec::new(),
+            opacity: Animated::constant(1.0),
         }
     }
 

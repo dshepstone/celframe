@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { targetLayer, useApp } from "../store";
+import { OpacityControl } from "./OpacityControl";
 import { Panel, panelIconButton } from "./Panel";
 import {
   EyeIcon,
@@ -64,6 +65,7 @@ export function LayersPanel() {
         </>
       }
     >
+      {target ? <OpacityControl scene={scene.id} layer={target} /> : null}
       <ul role="listbox" aria-label="Layer list" className="py-1">
         {layers.map((layer) => {
           const selected = layer.id === target?.id;

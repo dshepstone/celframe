@@ -16,7 +16,27 @@ export interface Layer {
   drawings: { id: string; strokes: Stroke[] }[];
   /** Sorted by start frame, with no overlaps. */
   exposures: Exposure[];
+  /** From 0 to 1. Keyable. */
+  opacity: Animated;
 }
+
+/** How a key's value travels to the next key's. See docs/specs/keyframes.md. */
+export type Interpolation = "linear" | "ease" | "step";
+
+export interface Key {
+  frame: number;
+  value: number;
+  interpolation: Interpolation;
+}
+
+/** A value with optional keys. */
+export interface Animated {
+  value: number;
+  keys: Key[];
+}
+
+/** A keyable value on a layer. */
+export type LayerProperty = "opacity";
 
 export interface Scene {
   id: string;
@@ -40,7 +60,29 @@ export type Command =
   | { type: "setLayerLocked"; scene: string; layer: string; locked: boolean }
   | { type: "renameLayer"; scene: string; layer: string; name: string }
   | { type: "removeLayer"; scene: string; layer: string }
-  | { type: "moveLayer"; scene: string; layer: string; index: number };
+  | { type: "moveLayer"; scene: string; layer: string; index: number }
+  | {
+      type: "setKey";
+      scene: string;
+      layer: string;
+      property: LayerProperty;
+      key: Key;
+    }
+  | {
+      type: "removeKey";
+      scene: string;
+      layer: string;
+      property: LayerProperty;
+      frame: number;
+    }
+  | {
+      type: "setBaseValue";
+      scene: string;
+      layer: string;
+      property: LayerProperty;
+      value: number;
+    }
+  | { type: "batch"; commands: Command[] };
 
 /** A change to the canvas view. Anchors are CSS pixels from the window's top left. */
 export type ViewChange =
