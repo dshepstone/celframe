@@ -108,6 +108,17 @@ export interface DocumentView {
   sceneLength: number;
 }
 
+/** Onion skin settings. See docs/specs/onion-skin.md. */
+export interface OnionSkin {
+  enabled: boolean;
+  before: number;
+  after: number;
+  byFrames: boolean;
+  step: number;
+  /** The nearest neighbour's opacity, from 0 to 1. */
+  opacity: number;
+}
+
 /** A timing edit at the current frame. See docs/specs/timing.md. */
 export type TimingEdit =
   | { type: "newDrawing" }
@@ -201,6 +212,9 @@ export const backend = {
   deleteSelection: () => invoke<DocumentView>("delete_selection"),
   nudgeSelection: (dx: number, dy: number) =>
     invoke<DocumentView>("nudge_selection", { dx, dy }),
+  setOnionSkin: async (onion: OnionSkin): Promise<void> => {
+    await invoke("set_onion_skin", { onion });
+  },
   setCurrentFrame: (frame: number) =>
     invoke<DocumentView>("set_current_frame", { frame }),
   editTiming: (edit: TimingEdit, layer: string | null) =>

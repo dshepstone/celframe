@@ -7,11 +7,12 @@ The centre of the window has two tabs. Step 2 of the [production plan](../plans/
 Shows the scene as it will be rendered:
 
 - Every visible layer at the current frame, composited in layer order.
-- The **resolution gate**: a 1.5-pixel teal outline around exactly the area that will be rendered, the scene's width by height.
-- Outside the gate the scene stays visible but **dimmed**, covered by the canvas surround at 65% opacity, so artwork that runs past the frame can still be seen and worked on.
+- A **light grey surround** around the paper, in both themes, so the frame reads clearly.
+- The **resolution gate**: a 1.5-pixel dark teal outline around exactly the area that will be rendered, the scene's width by height.
+- Outside the gate the scene stays visible but **dimmed**, covered by the light grey surround at 65% opacity, so artwork that runs past the frame can still be seen and worked on.
 - Zoom reaches from 1% to 25,600%, so you can pull far back from the gate or move right in.
 - Fit shows the whole gate filling 90% of the view.
-- Once the scene camera arrives (step 6), the gate follows the camera's framing.
+- Once the scene camera arrives (step 6), the gate follows the camera's framing, and moving the camera in and out along Z changes what it frames.
 
 ## Drawing view
 

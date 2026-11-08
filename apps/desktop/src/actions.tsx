@@ -65,6 +65,8 @@ export function useActions(): Action[] {
     togglePlayback,
     playing,
     editTiming,
+    onion,
+    setOnion,
     setShapeKind,
     setArt,
     toggleArt,
@@ -304,6 +306,14 @@ export function useActions(): Action[] {
       shortcut: "Shift+Space",
       enabled: hasDoc,
       run: togglePlayback,
+    },
+    {
+      id: "onion-skin",
+      label: onion.enabled ? "Turn onion skin off" : "Turn onion skin on",
+      group: "Timing",
+      shortcut: "O",
+      enabled: true,
+      run: () => setOnion({ enabled: !onion.enabled }),
     },
     {
       id: "timing.new-drawing",

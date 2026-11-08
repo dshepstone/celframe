@@ -35,6 +35,100 @@ export function cellsFor(layer: Layer, rows: number): Cell[] {
   return cells;
 }
 
+const numberField =
+  "h-5 w-9 rounded border border-control-border bg-surface-sunken px-1 text-right text-xs text-text tabular-nums outline-none focus:border-accent";
+
+/** Onion skin settings, in a bar at the top of the sheet. See docs/specs/onion-skin.md. */
+function OnionBar() {
+  const { onion, setOnion } = useApp();
+  const whole = (value: string, min: number, max: number) =>
+    Math.min(max, Math.max(min, Math.round(Number(value) || 0)));
+  const dim = onion.enabled ? "" : "opacity-50";
+  return (
+    <div
+      role="toolbar"
+      aria-label="Onion skin"
+      className="flex shrink-0 flex-wrap items-center gap-x-2.5 gap-y-1 border-b border-border bg-surface-raised px-2 py-1 text-xs text-text-muted"
+    >
+      <label className="flex items-center gap-1.5 font-medium text-text">
+        <input
+          type="checkbox"
+          checked={onion.enabled}
+          onChange={(e) => setOnion({ enabled: e.target.checked })}
+          className="accent-[var(--color-accent)]"
+        />
+        Onion skin
+      </label>
+      <label className={`flex items-center gap-1 ${dim}`}>
+        <span className="text-[#cd3c32]">Before</span>
+        <input
+          type="number"
+          aria-label="Onion skin before"
+          min={0}
+          max={5}
+          value={onion.before}
+          onChange={(e) => setOnion({ before: whole(e.target.value, 0, 5) })}
+          className={numberField}
+        />
+      </label>
+      <label className={`flex items-center gap-1 ${dim}`}>
+        <span className="text-[#28914f]">After</span>
+        <input
+          type="number"
+          aria-label="Onion skin after"
+          min={0}
+          max={5}
+          value={onion.after}
+          onChange={(e) => setOnion({ after: whole(e.target.value, 0, 5) })}
+          className={numberField}
+        />
+      </label>
+      <label className={`flex items-center gap-1 ${dim}`}>
+        <span>Count by</span>
+        <select
+          aria-label="Onion skin counts by"
+          value={onion.byFrames ? "frames" : "drawings"}
+          onChange={(e) => setOnion({ byFrames: e.target.value === "frames" })}
+          className="h-5 rounded border border-control-border bg-surface-sunken px-1 text-xs text-text"
+        >
+          <option value="drawings">Drawings</option>
+          <option value="frames">Frames</option>
+        </select>
+      </label>
+      {onion.byFrames ? (
+        <label className={`flex items-center gap-1 ${dim}`}>
+          <span>Every</span>
+          <input
+            type="number"
+            aria-label="Onion skin step in frames"
+            min={1}
+            max={24}
+            value={onion.step}
+            onChange={(e) => setOnion({ step: whole(e.target.value, 1, 24) })}
+            className={numberField}
+          />
+        </label>
+      ) : null}
+      <label className={`flex items-center gap-1 ${dim}`}>
+        <span>Opacity</span>
+        <input
+          type="range"
+          aria-label="Onion skin opacity"
+          min={10}
+          max={80}
+          step={5}
+          value={Math.round(onion.opacity * 100)}
+          onChange={(e) => setOnion({ opacity: Number(e.target.value) / 100 })}
+          className="w-20 accent-[var(--color-accent)]"
+        />
+        <span className="w-7 text-right tabular-nums">
+          {Math.round(onion.opacity * 100)}%
+        </span>
+      </label>
+    </div>
+  );
+}
+
 /** Rows of frames against columns of layers, typed into by drawing number. See docs/specs/exposure-sheet.md. */
 export function ExposureSheet() {
   const {
@@ -121,6 +215,7 @@ export function ExposureSheet() {
       aria-label="Exposure sheet"
       className="flex h-full min-h-0 flex-col bg-surface"
     >
+      <OnionBar />
       <div className="min-h-0 flex-1 overflow-auto">
         <table
           className="border-collapse text-xs tabular-nums"

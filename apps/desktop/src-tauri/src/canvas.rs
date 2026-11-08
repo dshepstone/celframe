@@ -23,7 +23,127 @@ pub enum ViewMode {
 }
 
 /// The gate's outline colour, and how strongly the area outside it is dimmed in the Camera view.
-const GATE_COLOR: [u8; 4] = [67, 178, 170, 255];
+const GATE_COLOR: [u8; 4] = [14, 110, 104, 255];
+/// The Camera view's light grey surround, in both themes. See `docs/specs/views.md`.
+pub const CAMERA_SURROUND: [u8; 4] = [206, 208, 212, 255];
+
+/// The colour around the paper in a view: light grey for the Camera view, the theme's
+/// backdrop for the Drawing view.
+pub fn surround(mode: ViewMode, layout: &CanvasLayout) -> [u8; 4] {
+    match mode {
+        ViewMode::Camera => CAMERA_SURROUND,
+        ViewMode::Drawing => layout.backdrop,
+    }
+}
+
+/// Onion skin settings. A viewing aid, never saved. See `docs/specs/onion-skin.md`.
+#[derive(Clone, Copy, Debug, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OnionSkin {
+    pub enabled: bool,
+    pub before: u32,
+    pub after: u32,
+    /// Count neighbours every `step` frames instead of by exposure.
+    pub by_frames: bool,
+    pub step: u32,
+    /// The nearest neighbour's opacity, from 0 to 1.
+    pub opacity: f64,
+}
+
+impl Default for OnionSkin {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            before: 2,
+            after: 1,
+            by_frames: false,
+            step: 1,
+            opacity: 0.35,
+        }
+    }
+}
+
+const BEFORE_TINT: [u8; 3] = [205, 60, 50];
+const AFTER_TINT: [u8; 3] = [40, 145, 80];
+
+/// The layer a view works with: the chosen one, or the topmost visible one.
+fn current_layer(scene: &Scene, layer: Option<LayerId>) -> Option<&celframe_core::Layer> {
+    layer
+        .and_then(|id| scene.layers.iter().find(|l| l.id == id))
+        .or_else(|| scene.layers.iter().rev().find(|l| l.visible))
+}
+
+/// Tinted copies of the current layer's neighbouring drawings, furthest first, to draw under
+/// the current drawing.
+pub fn onion_strokes(
+    scene: &Scene,
+    layer: Option<LayerId>,
+    frame: u32,
+    onion: &OnionSkin,
+) -> Vec<Stroke> {
+    let Some(layer) = current_layer(scene, layer).filter(|_| onion.enabled) else {
+        return Vec::new();
+    };
+    let current = layer.drawing_at(frame).map(|d| d.id);
+    let drawing = |id| layer.drawings.iter().find(|d| d.id == id);
+    let exposures = &layer.exposures;
+
+    // Each side's neighbours, nearest first.
+    let (before, after): (Vec<_>, Vec<_>) = if onion.by_frames {
+        let step = onion.step.max(1);
+        let at = |offset: i64| {
+            u32::try_from(i64::from(frame) + offset)
+                .ok()
+                .and_then(|f| layer.drawing_at(f))
+                .map(|d| d.id)
+        };
+        (
+            (1..=i64::from(onion.before))
+                .filter_map(|i| at(-i * i64::from(step)))
+                .collect(),
+            (1..=i64::from(onion.after))
+                .filter_map(|i| at(i * i64::from(step)))
+                .collect(),
+        )
+    } else {
+        let earlier = exposures
+            .iter()
+            .rev()
+            .filter(|e| e.start_frame + e.length <= frame)
+            .map(|e| e.drawing);
+        let later = exposures
+            .iter()
+            .filter(|e| e.start_frame > frame)
+            .map(|e| e.drawing);
+        (
+            earlier.take(onion.before as usize).collect(),
+            later.take(onion.after as usize).collect(),
+        )
+    };
+
+    let mut strokes = Vec::new();
+    for (side, tint) in [(before, BEFORE_TINT), (after, AFTER_TINT)] {
+        let count = side.len().max(1) as f64;
+        // Furthest first, so nearer neighbours draw on top.
+        for (distance, id) in side.into_iter().enumerate().rev() {
+            if Some(id) == current {
+                continue;
+            }
+            let strength = onion.opacity.clamp(0.0, 1.0) * (count - distance as f64) / count;
+            for stroke in drawing(id)
+                .into_iter()
+                .flat_map(|d| d.strokes_in_draw_order())
+            {
+                let alpha = (f64::from(stroke.color[3]) * strength).round() as u8;
+                strokes.push(Stroke {
+                    color: [tint[0], tint[1], tint[2], alpha],
+                    ..stroke.clone()
+                });
+            }
+        }
+    }
+    strokes
+}
 const GATE_WIDTH: f64 = 1.5;
 const GUIDE_COLOR: [u8; 4] = [128, 128, 128, 140];
 const OUTSIDE_DIM: f64 = 0.65;
@@ -207,6 +327,7 @@ pub struct WindowCanvas {
     mode: ViewMode,
     /// The layer the Drawing view shows, as the UI chose it.
     drawing_layer: Option<LayerId>,
+    onion: OnionSkin,
 }
 
 impl WindowCanvas {
@@ -256,6 +377,7 @@ impl WindowCanvas {
             views: [None, None],
             mode: ViewMode::Camera,
             drawing_layer: None,
+            onion: OnionSkin::default(),
         })
     }
 
@@ -305,6 +427,14 @@ impl WindowCanvas {
         self.drawing_layer
     }
 
+    pub fn onion(&self) -> OnionSkin {
+        self.onion
+    }
+
+    pub fn set_onion(&mut self, onion: OnionSkin) {
+        self.onion = onion;
+    }
+
     /// Shows a view. Each view keeps its own navigation.
     pub fn set_mode(&mut self, mode: ViewMode, drawing_layer: Option<LayerId>) {
         self.mode = mode;
@@ -348,6 +478,10 @@ impl WindowCanvas {
             [self.config.width, self.config.height],
             self.view(),
         );
+        let canvas = Canvas {
+            backdrop: surround(self.mode, &layout),
+            ..canvas
+        };
         let target = frame.texture.create_view(&Default::default());
         let mut encoder = self
             .renderer
@@ -429,6 +563,82 @@ mod tests {
         );
         let gone = Some(LayerId::new());
         assert_eq!(xs(&view_strokes(&scene, ViewMode::Drawing, gone, 0)), [1.0]);
+    }
+
+    /// One layer with drawings A to E, each exposed for two frames from frame 0.
+    fn five_drawings() -> (Scene, Vec<f64>) {
+        let mut project = celframe_core::Project::starter("A");
+        let layer = &mut project.scenes[0].layers[0];
+        layer.drawings.clear();
+        layer.exposures.clear();
+        let xs = vec![10.0, 20.0, 30.0, 40.0, 50.0];
+        for (i, &x) in xs.iter().enumerate() {
+            let mut drawing = celframe_core::Drawing::new();
+            drawing.strokes.push(line(x));
+            let id = drawing.id;
+            layer.drawings.push(drawing);
+            layer
+                .insert_exposure(celframe_core::Exposure::new(i as u32 * 2, 2, id))
+                .unwrap();
+        }
+        (project.scenes.remove(0), xs)
+    }
+
+    #[test]
+    fn onion_skin_shows_neighbouring_drawings_tinted_and_fading() {
+        let (scene, _) = five_drawings();
+        let onion = OnionSkin {
+            enabled: true,
+            before: 2,
+            after: 1,
+            ..OnionSkin::default()
+        };
+        // Frame 4 shows drawing C; before are B and A, after is D.
+        let strokes = onion_strokes(&scene, None, 4, &onion);
+        let shown: Vec<(f64, u8, u8)> = strokes
+            .iter()
+            .map(|s| (s.samples[0].x, s.color[0], s.color[3]))
+            .collect();
+        // Furthest first: A at half strength, then B, then D.
+        assert_eq!(shown, [(10.0, 205, 45), (20.0, 205, 89), (40.0, 40, 89)]);
+        let off = OnionSkin {
+            enabled: false,
+            ..onion
+        };
+        assert!(onion_strokes(&scene, None, 4, &off).is_empty());
+    }
+
+    #[test]
+    fn onion_skin_can_count_by_frames() {
+        let (scene, _) = five_drawings();
+        let onion = OnionSkin {
+            enabled: true,
+            before: 2,
+            after: 2,
+            by_frames: true,
+            step: 3,
+            ..OnionSkin::default()
+        };
+        // From frame 4 (C): frames 1 and -2 before, 7 and 10 after: A, D, and nothing.
+        let xs: Vec<f64> = onion_strokes(&scene, None, 4, &onion)
+            .iter()
+            .map(|s| s.samples[0].x)
+            .collect();
+        assert_eq!(xs, [10.0, 40.0]);
+    }
+
+    #[test]
+    fn the_camera_view_has_a_light_grey_surround() {
+        let layout = CanvasLayout {
+            x: 0.0,
+            y: 0.0,
+            width: 10.0,
+            height: 10.0,
+            scale: 1.0,
+            backdrop: [1, 2, 3, 255],
+        };
+        assert_eq!(surround(ViewMode::Camera, &layout), CAMERA_SURROUND);
+        assert_eq!(surround(ViewMode::Drawing, &layout), [1, 2, 3, 255]);
     }
 
     #[test]

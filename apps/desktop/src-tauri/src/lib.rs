@@ -60,11 +60,15 @@ fn redraw(app: &AppHandle) {
         let pixel = 1.0 / zoom;
         let mode = canvas.mode();
         // The frame's dimming and gate go under the selection's outlines and handles.
-        let mut overlay = canvas::frame_overlay(scene, mode, pixel, layout.backdrop);
+        let surround = canvas::surround(mode, &layout);
+        let mut overlay = canvas::frame_overlay(scene, mode, pixel, surround);
         overlay.extend(session.overlay(pixel));
         let frame = session.current_frame();
-        let strokes = canvas::view_strokes(scene, mode, canvas.drawing_layer(), frame);
-        canvas.render(scene, strokes.into_iter(), &overlay);
+        let layer = canvas.drawing_layer();
+        let strokes = canvas::view_strokes(scene, mode, layer, frame);
+        // Onion skin draws under the current drawing.
+        let onion = canvas::onion_strokes(scene, layer, frame, &canvas.onion());
+        canvas.render(scene, onion.iter().chain(strokes), &overlay);
     }
 }
 
@@ -142,6 +146,22 @@ fn delete_selection(
 ) -> Result<DocumentView, String> {
     let result = lock(&state)?.delete_selection();
     redrawn(&app, result)
+}
+
+#[tauri::command]
+fn set_onion_skin(
+    app: AppHandle,
+    canvas: State<'_, CanvasState>,
+    onion: canvas::OnionSkin,
+) -> Result<(), String> {
+    {
+        let mut canvas = canvas.0.lock().map_err(|_| "the canvas is unavailable")?;
+        if let Some(canvas) = canvas.as_mut() {
+            canvas.set_onion(onion);
+        }
+    }
+    redraw(&app);
+    Ok(())
 }
 
 #[tauri::command]
@@ -700,7 +720,8 @@ pub fn run() {
             set_handles_visible,
             set_view_mode,
             set_current_frame,
-            edit_timing
+            edit_timing,
+            set_onion_skin
         ])
         .build(tauri::generate_context!())
         .expect("the app failed to start")

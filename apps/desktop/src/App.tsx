@@ -139,6 +139,10 @@ export function App() {
         e: () => setTool("eraser"),
         u: () => setTool("shape"),
         v: () => setTool("select"),
+        o: () => {
+          const { onion, setOnion } = useApp.getState();
+          setOnion({ enabled: !onion.enabled });
+        },
         escape: () => void clearSelection(),
         delete: () => void deleteSelection(),
         backspace: () => void deleteSelection(),
