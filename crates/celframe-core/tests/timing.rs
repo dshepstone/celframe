@@ -1,4 +1,6 @@
-use celframe_core::timing::{delete_frames, hold, insert_frames, scene_length, with_new_drawing};
+use celframe_core::timing::{
+    clear_frame, delete_frames, expose, hold, insert_frames, scene_length, with_new_drawing,
+};
 use celframe_core::{DrawingId, Exposure, Layer, Scene};
 
 /// Exposures as (start, length, which drawing).
@@ -99,4 +101,36 @@ fn the_scene_runs_to_its_last_exposure() {
     layer.insert_exposure(Exposure::new(10, 5, id)).unwrap();
     scene.layers.push(layer);
     assert_eq!(scene_length(&scene), 15);
+}
+
+#[test]
+fn exposing_a_drawing_starts_it_here_and_takes_over_the_rest_of_a_hold() {
+    let (e, ids) = setup();
+    assert_eq!(
+        spans(&expose(&e, 2, ids[1]).unwrap(), &ids),
+        [(0, 2, 0), (2, 2, 1), (6, 2, 1)]
+    );
+    assert_eq!(
+        spans(&expose(&e, 0, ids[2]).unwrap(), &ids),
+        [(0, 4, 2), (6, 2, 1)]
+    );
+    assert_eq!(
+        spans(&expose(&e, 5, ids[2]).unwrap(), &ids),
+        [(0, 4, 0), (5, 1, 2), (6, 2, 1)]
+    );
+    assert!(expose(&e, 0, ids[0]).is_none(), "already starts here");
+}
+
+#[test]
+fn clearing_a_frame_leaves_a_gap_and_moves_nothing() {
+    let (e, ids) = setup();
+    assert_eq!(
+        spans(&clear_frame(&e, 1).unwrap(), &ids),
+        [(0, 1, 0), (2, 2, 0), (6, 2, 1)]
+    );
+    assert_eq!(
+        spans(&clear_frame(&e, 7).unwrap(), &ids),
+        [(0, 4, 0), (6, 1, 1)]
+    );
+    assert!(clear_frame(&e, 5).is_none());
 }

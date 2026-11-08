@@ -1,6 +1,12 @@
 /** The arrangement of panel tabs in dock areas. See docs/specs/docking.md. */
 
-export const PANELS = ["tool", "colour", "layers", "timeline"] as const;
+export const PANELS = [
+  "tool",
+  "colour",
+  "layers",
+  "timeline",
+  "xsheet",
+] as const;
 export type PanelId = (typeof PANELS)[number];
 
 export type AreaId = "left" | "right" | "bottom";
@@ -55,7 +61,7 @@ export function defaultLayout(): DockLayout {
         stack("right-colour", ["colour"], 0.6),
         stack("right-layers", ["layers"], 1),
       ],
-      bottom: [stack("bottom-timeline", ["timeline"])],
+      bottom: [stack("bottom-timeline", ["timeline", "xsheet"])],
     },
     sizes: { left: 260, right: 272, bottom: 160 },
   };
@@ -207,6 +213,37 @@ export function resizeStacks(
   return { ...layout, areas };
 }
 
+/**
+ * Adds panels a stored layout doesn't know about, such as ones added in a newer version, next
+ * to a panel they share a stack with by default, or in their default area.
+ */
+function withNewPanels(
+  layout: DockLayout,
+  present: ReadonlySet<PanelId>,
+): DockLayout {
+  let result = layout;
+  const defaults = defaultLayout();
+  for (const panel of PANELS) {
+    if (present.has(panel)) continue;
+    const home = findPanel(defaults, panel);
+    if (!home) continue;
+    const neighbour = home.stack.tabs.find(
+      (t) => t !== panel && findPanel(result, t),
+    );
+    const there = neighbour ? findPanel(result, neighbour) : null;
+    const areas = { ...result.areas };
+    if (there) {
+      areas[there.area] = areas[there.area].map((s) =>
+        s.id === there.stack.id ? { ...s, tabs: [...s.tabs, panel] } : s,
+      );
+    } else {
+      areas[home.area] = [...areas[home.area], stack(newStackId(), [panel])];
+    }
+    result = { ...result, areas };
+  }
+  return result;
+}
+
 /** Reads a stored layout, falling back to the default when it isn't usable. */
 export function parseLayout(stored: string | null): DockLayout {
   const fallback = defaultLayout();
@@ -248,7 +285,7 @@ export function parseLayout(stored: string | null): DockLayout {
       const size = Number(value.sizes?.[area]);
       if (Number.isFinite(size)) sizes[area] = clampSize(area, size);
     }
-    return { areas, sizes };
+    return withNewPanels({ areas, sizes }, seen);
   } catch {
     return fallback;
   }

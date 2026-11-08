@@ -113,7 +113,9 @@ export type TimingEdit =
   | { type: "newDrawing" }
   | { type: "hold"; by: number }
   | { type: "insertFrame" }
-  | { type: "deleteFrame" };
+  | { type: "deleteFrame" }
+  | { type: "expose"; number: number }
+  | { type: "clearFrame" };
 
 /** The centre's views. See docs/specs/views.md. */
 export type ViewMode = "drawing" | "camera";

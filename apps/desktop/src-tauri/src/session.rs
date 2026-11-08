@@ -47,9 +47,18 @@ pub struct Session {
 )]
 pub enum TimingEdit {
     NewDrawing,
-    Hold { by: i64 },
+    Hold {
+        by: i64,
+    },
     InsertFrame,
     DeleteFrame,
+    /// Exposes the layer's drawing with this number, counted from 1, from the current frame.
+    /// The next unused number creates a new drawing.
+    Expose {
+        number: u32,
+    },
+    /// Empties the current frame without moving anything.
+    ClearFrame,
 }
 
 /// How far past the scene's end the current frame may go, so there's room to keep drawing.
@@ -1077,6 +1086,34 @@ impl Session {
                 .map(|after| timing::replace_exposures(scene, target, &after)),
             TimingEdit::DeleteFrame => timing::delete_frames(&target.exposures, frame, 1)
                 .map(|after| timing::replace_exposures(scene, target, &after)),
+            TimingEdit::ClearFrame => timing::clear_frame(&target.exposures, frame)
+                .map(|after| timing::replace_exposures(scene, target, &after)),
+            TimingEdit::Expose { number } => {
+                let count = target.drawings.len() as u32;
+                if number == 0 || number > count + 1 {
+                    return Err(format!(
+                        "This layer has no drawing {number}. Its drawings are numbered 1 to {count}, and {} makes a new one.",
+                        count + 1
+                    ));
+                }
+                if number <= count {
+                    let id = target.drawings[number as usize - 1].id;
+                    timing::expose(&target.exposures, frame, id)
+                        .map(|after| timing::replace_exposures(scene, target, &after))
+                } else {
+                    let drawing = Drawing::new();
+                    let after = timing::expose(&target.exposures, frame, drawing.id)
+                        .unwrap_or_else(|| target.exposures.clone());
+                    let mut commands = vec![Command::AddDrawing {
+                        scene,
+                        layer,
+                        drawing,
+                        index: target.drawings.len(),
+                    }];
+                    commands.extend(timing::replace_exposures(scene, target, &after));
+                    Some(commands)
+                }
+            }
         };
         if let Some(commands) = commands {
             self.selection = None;
@@ -1791,6 +1828,47 @@ mod tests {
             .edit_timing(TimingEdit::Hold { by: 1 }, None)
             .unwrap();
         assert_eq!(session.view().can_redo, before);
+    }
+
+    #[test]
+    fn typing_drawing_numbers_exposes_them_and_makes_the_next_one() {
+        let mut session = Session::new(Project::starter("A"));
+        session
+            .edit_timing(TimingEdit::Hold { by: 3 }, None)
+            .unwrap();
+        session.set_current_frame(2);
+        // Drawing 2 doesn't exist yet: typing it makes it, taking over the rest of the hold.
+        let view = session
+            .edit_timing(TimingEdit::Expose { number: 2 }, None)
+            .unwrap();
+        let layer = &view.project.scenes[0].layers[0];
+        assert_eq!(layer.drawings.len(), 2);
+        let spans: Vec<_> = layer
+            .exposures
+            .iter()
+            .map(|e| (e.start_frame, e.length))
+            .collect();
+        assert_eq!(spans, [(0, 2), (2, 2)]);
+        assert!(
+            session
+                .edit_timing(TimingEdit::Expose { number: 9 }, None)
+                .is_err()
+        );
+        assert!(
+            session
+                .edit_timing(TimingEdit::Expose { number: 0 }, None)
+                .is_err()
+        );
+        let cleared = session.edit_timing(TimingEdit::ClearFrame, None).unwrap();
+        let spans: Vec<_> = cleared.project.scenes[0].layers[0]
+            .exposures
+            .iter()
+            .map(|e| (e.start_frame, e.length))
+            .collect();
+        assert_eq!(spans, [(0, 2), (3, 1)]);
+        session.undo().unwrap();
+        session.undo().unwrap();
+        assert_eq!(session.view().project.scenes[0].layers[0].drawings.len(), 1);
     }
 
     #[test]
