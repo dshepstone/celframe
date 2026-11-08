@@ -104,6 +104,9 @@ export interface DocumentView {
   selectionBounds: [number, number, number, number] | null;
 }
 
+/** The centre's views. See docs/specs/views.md. */
+export type ViewMode = "drawing" | "camera";
+
 export type Arrange = "front" | "forward" | "backward" | "back";
 
 /** An edit to the whole selection. See docs/specs/transform-and-arrange.md. */
@@ -185,6 +188,9 @@ export const backend = {
   deleteSelection: () => invoke<DocumentView>("delete_selection"),
   nudgeSelection: (dx: number, dy: number) =>
     invoke<DocumentView>("nudge_selection", { dx, dy }),
+  /** Shows the Drawing or Camera view. Null while the canvas isn't ready. */
+  setViewMode: (mode: ViewMode, layer: string | null) =>
+    invoke<ViewInfo | null>("set_view_mode", { mode, layer }),
   setHandlesVisible: async (visible: boolean): Promise<void> => {
     await invoke("set_handles_visible", { visible });
   },

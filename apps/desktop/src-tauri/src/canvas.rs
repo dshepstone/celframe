@@ -1,7 +1,7 @@
 //! The native canvas: draws the open scene into the main window, under the transparent webview.
 //! See ADR-0001 and `docs/specs/canvas-rendering.md`.
 
-use celframe_core::{Scene, Stroke};
+use celframe_core::{Art, LayerId, Scene, Stroke, StrokeId, StrokeSample};
 use celframe_render::{Canvas, Paper, RenderError, Renderer, View};
 use serde::Deserialize;
 use tauri::WebviewWindow;
@@ -10,6 +10,97 @@ use tauri::WebviewWindow;
 const PAPER: [u8; 4] = [255, 255, 255, 255];
 /// How much of the canvas area the scene frame fills when fitted.
 const FIT: f64 = 0.9;
+
+/// Which of the centre's views is showing. See `docs/specs/views.md`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ViewMode {
+    /// One drawing on its own.
+    Drawing,
+    /// The scene as it renders, with the resolution gate.
+    #[default]
+    Camera,
+}
+
+/// The gate's outline colour, and how strongly the area outside it is dimmed in the Camera view.
+const GATE_COLOR: [u8; 4] = [67, 178, 170, 255];
+const GATE_WIDTH: f64 = 1.5;
+const GUIDE_COLOR: [u8; 4] = [128, 128, 128, 140];
+const OUTSIDE_DIM: f64 = 0.65;
+
+/// The strokes a view shows, bottom first. The Drawing view shows the drawing on `layer`, or
+/// on the topmost visible layer when that's None or no longer exists.
+pub fn view_strokes(scene: &Scene, mode: ViewMode, layer: Option<LayerId>) -> Vec<&Stroke> {
+    match mode {
+        ViewMode::Camera => scene.visible_strokes(0).collect(),
+        ViewMode::Drawing => {
+            let chosen = layer.and_then(|id| scene.layers.iter().find(|l| l.id == id));
+            let shown = chosen.or_else(|| scene.layers.iter().rev().find(|l| l.visible));
+            shown
+                .and_then(|l| l.drawing_at(0))
+                .map_or_else(Vec::new, |d| d.strokes_in_draw_order().collect())
+        }
+    }
+}
+
+fn stroke_through(points: &[[f64; 2]], width: f64, color: [u8; 4]) -> Stroke {
+    Stroke {
+        id: StrokeId::from_u128(0),
+        base_width: width,
+        color,
+        art: Art::Line,
+        samples: points
+            .iter()
+            .map(|&[x, y]| StrokeSample {
+                x,
+                y,
+                pressure: 1.0,
+            })
+            .collect(),
+    }
+}
+
+fn closed(rect: [f64; 4]) -> [[f64; 2]; 5] {
+    [
+        [rect[0], rect[1]],
+        [rect[2], rect[1]],
+        [rect[2], rect[3]],
+        [rect[0], rect[3]],
+        [rect[0], rect[1]],
+    ]
+}
+
+/// What a view draws over the scene for the frame: in the Camera view, a dimmed surround and
+/// the gate's outline; in the Drawing view, a faint guide. `pixel` is one device pixel in
+/// scene units, and `backdrop` the canvas surround's colour.
+pub fn frame_overlay(scene: &Scene, mode: ViewMode, pixel: f64, backdrop: [u8; 4]) -> Vec<Stroke> {
+    let gate = Paper::scene_frame(scene.width, scene.height, PAPER).rect;
+    match mode {
+        ViewMode::Drawing => vec![stroke_through(&closed(gate), pixel, GUIDE_COLOR)],
+        ViewMode::Camera => {
+            // A very wide stroke around the gate, its inner edge on the gate. The inside of a
+            // stroke's corners stays sharp, so the dimming meets the gate exactly.
+            let reach = (f64::from(scene.width) + f64::from(scene.height)) * 50.0;
+            let half = reach / 2.0;
+            let around = [
+                gate[0] - half,
+                gate[1] - half,
+                gate[2] + half,
+                gate[3] + half,
+            ];
+            let dim = [
+                backdrop[0],
+                backdrop[1],
+                backdrop[2],
+                (OUTSIDE_DIM * 255.0).round() as u8,
+            ];
+            vec![
+                stroke_through(&closed(around), reach, dim),
+                stroke_through(&closed(gate), GATE_WIDTH * pixel, GATE_COLOR),
+            ]
+        }
+    }
+}
 
 /// Where the webview's canvas area is, and what colour surrounds the paper. Sent by the UI.
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq)]
@@ -106,8 +197,11 @@ pub struct WindowCanvas {
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
     layout: Option<CanvasLayout>,
-    /// The person's zoom, pan and rotation. None shows the fitted scene.
-    view: Option<View>,
+    /// Each view's zoom, pan and rotation, Drawing then Camera. None shows the fitted scene.
+    views: [Option<View>; 2],
+    mode: ViewMode,
+    /// The layer the Drawing view shows, as the UI chose it.
+    drawing_layer: Option<LayerId>,
 }
 
 impl WindowCanvas {
@@ -154,7 +248,9 @@ impl WindowCanvas {
             surface,
             config,
             layout: None,
-            view: None,
+            views: [None, None],
+            mode: ViewMode::Camera,
+            drawing_layer: None,
         })
     }
 
@@ -180,28 +276,54 @@ impl WindowCanvas {
         self.layout
     }
 
-    /// The view the canvas shows, or None for the fitted scene.
+    fn slot(mode: ViewMode) -> usize {
+        match mode {
+            ViewMode::Drawing => 0,
+            ViewMode::Camera => 1,
+        }
+    }
+
+    /// The current view's zoom, pan and rotation, or None for the fitted scene.
     pub fn view(&self) -> Option<View> {
-        self.view
+        self.views[Self::slot(self.mode)]
     }
 
     pub fn set_view(&mut self, view: Option<View>) {
-        self.view = view;
+        self.views[Self::slot(self.mode)] = view;
+    }
+
+    pub fn mode(&self) -> ViewMode {
+        self.mode
+    }
+
+    pub fn drawing_layer(&self) -> Option<LayerId> {
+        self.drawing_layer
+    }
+
+    /// Shows a view. Each view keeps its own navigation.
+    pub fn set_mode(&mut self, mode: ViewMode, drawing_layer: Option<LayerId>) {
+        self.mode = mode;
+        self.drawing_layer = drawing_layer;
     }
 
     /// Device pixels per scene unit in the view drawn now. None until the UI sends a layout.
     pub fn zoom(&self, scene: &Scene) -> Option<f64> {
         let layout = self.layout?;
         Some(
-            self.view
+            self.view()
                 .unwrap_or_else(|| fitted_view(scene, &layout))
                 .zoom,
         )
     }
 
-    /// Draws a scene's frame 0 with `overlay` on top, and presents it. Does nothing until the
-    /// UI has sent a layout.
-    pub fn render(&mut self, scene: &Scene, overlay: &[Stroke]) {
+    /// Draws `strokes` from a scene's frame 0 with `overlay` on top, and presents it. Does
+    /// nothing until the UI has sent a layout.
+    pub fn render<'a>(
+        &mut self,
+        scene: &Scene,
+        strokes: impl Iterator<Item = &'a Stroke>,
+        overlay: &'a [Stroke],
+    ) {
         let Some(layout) = self.layout else {
             return;
         };
@@ -219,7 +341,7 @@ impl WindowCanvas {
             scene,
             &layout,
             [self.config.width, self.config.height],
-            self.view,
+            self.view(),
         );
         let target = frame.texture.create_view(&Default::default());
         let mut encoder = self
@@ -231,7 +353,7 @@ impl WindowCanvas {
             &target,
             self.config.format,
             &canvas,
-            scene.visible_strokes(0).chain(overlay),
+            strokes.chain(overlay),
             &view,
         );
         self.renderer.submit(encoder);
@@ -242,6 +364,138 @@ impl WindowCanvas {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn line(x: f64) -> Stroke {
+        Stroke {
+            samples: vec![
+                StrokeSample {
+                    x,
+                    y: 0.0,
+                    pressure: 1.0,
+                },
+                StrokeSample {
+                    x,
+                    y: 10.0,
+                    pressure: 1.0,
+                },
+            ],
+            ..stroke_through(&[], 2.0, [0, 0, 0, 255])
+        }
+    }
+
+    /// A scene with a bottom layer holding a stroke at x = 1 and a top layer at x = 2.
+    fn two_layers() -> Scene {
+        let mut project = celframe_core::Project::starter("A");
+        let scene = &mut project.scenes[0];
+        scene.layers[0].drawings[0].strokes.push(line(1.0));
+        let mut top = scene.layers[0].clone();
+        top.id = LayerId::new();
+        top.drawings[0].strokes = vec![line(2.0)];
+        scene.layers.push(top);
+        project.scenes.remove(0)
+    }
+
+    fn xs(strokes: &[&Stroke]) -> Vec<f64> {
+        strokes.iter().map(|s| s.samples[0].x).collect()
+    }
+
+    #[test]
+    fn the_camera_view_shows_every_visible_layer_and_the_drawing_view_one() {
+        let mut scene = two_layers();
+        let bottom = scene.layers[0].id;
+        assert_eq!(
+            xs(&view_strokes(&scene, ViewMode::Camera, None)),
+            [1.0, 2.0]
+        );
+        assert_eq!(
+            xs(&view_strokes(&scene, ViewMode::Drawing, Some(bottom))),
+            [1.0]
+        );
+        assert_eq!(
+            xs(&view_strokes(&scene, ViewMode::Drawing, None)),
+            [2.0],
+            "topmost"
+        );
+        scene.layers[1].visible = false;
+        assert_eq!(
+            xs(&view_strokes(&scene, ViewMode::Drawing, None)),
+            [1.0],
+            "visible only"
+        );
+        let gone = Some(LayerId::new());
+        assert_eq!(xs(&view_strokes(&scene, ViewMode::Drawing, gone)), [1.0]);
+    }
+
+    #[test]
+    fn the_camera_view_dims_outside_the_gate_and_outlines_it() {
+        let scene = Scene::new("Shot");
+        let [dim, gate] = &frame_overlay(&scene, ViewMode::Camera, 0.5, [10, 20, 30, 255])[..]
+        else {
+            panic!("two strokes");
+        };
+        assert_eq!(dim.color, [10, 20, 30, 166]);
+        // The dimming stroke's inner edge sits exactly on the gate.
+        let inner = dim.samples[0].x + dim.base_width / 2.0;
+        assert_eq!(inner, -960.0);
+        assert_eq!((gate.samples[0].x, gate.samples[0].y), (-960.0, -540.0));
+        assert_eq!(gate.base_width, 0.75);
+        let guide = frame_overlay(&scene, ViewMode::Drawing, 0.5, [0; 4]);
+        assert_eq!(guide.len(), 1, "the Drawing view only gets a guide");
+    }
+
+    #[test]
+    fn rendering_the_camera_view_leaves_the_paper_clear_and_dims_beyond_it() {
+        let Ok(mut renderer) = celframe_render::Renderer::new_headless() else {
+            return;
+        };
+        let scene = Scene::new("Shot");
+        let backdrop = [40, 40, 40, 255];
+        let layout = CanvasLayout {
+            x: 0.0,
+            y: 0.0,
+            width: 200.0,
+            height: 200.0,
+            scale: 1.0,
+            backdrop,
+        };
+        let (canvas, view) = frame_for(&scene, &layout, [200, 200], None);
+        // A wide stroke crossing the gate's left edge, half inside and half outside.
+        let crossing = Stroke {
+            base_width: 400.0,
+            color: [0, 0, 255, 255],
+            samples: vec![
+                StrokeSample {
+                    x: -960.0,
+                    y: -500.0,
+                    pressure: 1.0,
+                },
+                StrokeSample {
+                    x: -960.0,
+                    y: 500.0,
+                    pressure: 1.0,
+                },
+            ],
+            ..stroke_through(&[], 1.0, [0; 4])
+        };
+        let pixel = 1.0 / view.zoom;
+        let overlay = frame_overlay(&scene, ViewMode::Camera, pixel, backdrop);
+        let image = renderer
+            .render_image(std::iter::once(&crossing).chain(&overlay), &view, &canvas)
+            .unwrap();
+        // The gate fills 90% of 200 px across: x from 10 to 190, the middle row at y = 100.
+        let inside = image.pixel(14, 100);
+        let outside = image.pixel(6, 100);
+        assert_eq!(
+            inside,
+            [0, 0, 255, 255],
+            "the stroke inside the gate is untouched"
+        );
+        assert!(
+            outside[2] < 140 && outside[0] > 15,
+            "dimmed outside: {outside:?}"
+        );
+        assert_eq!(image.pixel(100, 100), [255, 255, 255, 255], "paper inside");
+    }
 
     fn layout(scale: f64) -> CanvasLayout {
         CanvasLayout {

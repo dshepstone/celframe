@@ -30,6 +30,7 @@ vi.mock("./backend", () => ({
     nudgeSelection: vi.fn(),
     editSelection: vi.fn(),
     setHandlesVisible: vi.fn(() => Promise.resolve()),
+    setViewMode: vi.fn(() => Promise.resolve(null)),
     onCloseRequested: vi.fn(() => Promise.resolve(() => undefined)),
   },
 }));
@@ -239,6 +240,34 @@ describe("App shell", () => {
       ["colour"],
       ["layers"],
     ]);
+  });
+
+  it("switches between the Drawing and Camera views", async () => {
+    vi.mocked(backend.setViewMode).mockResolvedValue({
+      zoomPercent: 42,
+      rotationDegrees: 0,
+      fitted: true,
+    });
+    render(<App />);
+    await screen.findByText("Bouncing ball");
+    const views = within(screen.getByRole("tablist", { name: "View" }));
+    expect(
+      views.getByRole("tab", { name: "Camera", selected: true }),
+    ).toBeTruthy();
+
+    await userEvent.click(views.getByRole("tab", { name: "Drawing" }));
+    expect(backend.setViewMode).toHaveBeenLastCalledWith("drawing", null);
+    expect(
+      views.getByRole("tab", { name: "Drawing", selected: true }),
+    ).toBeTruthy();
+    await waitFor(() => expect(useApp.getState().view?.zoomPercent).toBe(42));
+
+    // The Drawing view follows the chosen layer.
+    act(() => useApp.getState().setActiveLayer("l1"));
+    expect(backend.setViewMode).toHaveBeenLastCalledWith("drawing", "l1");
+
+    await userEvent.keyboard("{Control>}2{/Control}");
+    expect(backend.setViewMode).toHaveBeenLastCalledWith("camera", "l1");
   });
 
   it("cancels a tab drag with Escape", async () => {
