@@ -14,6 +14,7 @@ import {
   type ViewInfo,
   type ViewMode,
   type TimingEdit,
+  type OnionSkin,
 } from "./backend";
 import {
   type Shelf,
@@ -191,6 +192,8 @@ export interface AppState {
   stopPlayback: () => void;
   setLoop: (loop: boolean) => void;
   editTiming: (edit: TimingEdit) => Promise<void>;
+  onion: OnionSkin;
+  setOnion: (change: Partial<OnionSkin>) => void;
   setViewMode: (mode: ViewMode) => Promise<void>;
   /** How dragging from empty space selects with the Select tool. */
   selectMode: "box" | "lasso";
@@ -385,10 +388,8 @@ export const useApp = create<AppState>((set, get) => {
       // A selection belongs to one layer and part.
       if (changed) void get().clearSelection();
       set({ activeLayer });
-      // The Drawing view shows the chosen layer.
-      if (changed && get().viewMode === "drawing") {
-        void get().setViewMode("drawing");
-      }
+      // The Drawing view and onion skin show the chosen layer.
+      if (changed) void get().setViewMode(get().viewMode);
     },
     runCommand: async (command) => {
       get().stopPlayback();
@@ -419,6 +420,22 @@ export const useApp = create<AppState>((set, get) => {
     viewMode: "camera",
     playing: false,
     loop: true,
+    onion: {
+      enabled: false,
+      before: 2,
+      after: 1,
+      byFrames: false,
+      step: 1,
+      opacity: 0.35,
+    },
+    setOnion: (change) => {
+      const onion = { ...get().onion, ...change };
+      set({ onion });
+      // Outside the desktop app there is no canvas to tell.
+      Promise.resolve()
+        .then(() => backend.setOnionSkin(onion))
+        .catch(() => undefined);
+    },
     setCurrentFrame: async (frame) => {
       if (!get().document) return;
       await sync(backend.setCurrentFrame(Math.max(0, Math.round(frame))));

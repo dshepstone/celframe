@@ -32,6 +32,7 @@ vi.mock("./backend", () => ({
     setHandlesVisible: vi.fn(() => Promise.resolve()),
     setViewMode: vi.fn(() => Promise.resolve(null)),
     setCurrentFrame: vi.fn(),
+    setOnionSkin: vi.fn(() => Promise.resolve()),
     editTiming: vi.fn(),
     onCloseRequested: vi.fn(() => Promise.resolve(() => undefined)),
   },
@@ -448,6 +449,42 @@ describe("App shell", () => {
       layer: "l1",
       visible: false,
     });
+  });
+
+  it("turns onion skin on and sets its timing from the exposure sheet", async () => {
+    render(<App />);
+    await screen.findByText("Bouncing ball");
+    await userEvent.click(screen.getByRole("tab", { name: "Exposure sheet" }));
+    const bar = within(screen.getByRole("toolbar", { name: "Onion skin" }));
+    await userEvent.click(bar.getByRole("checkbox", { name: "Onion skin" }));
+    await waitFor(() =>
+      expect(backend.setOnionSkin).toHaveBeenLastCalledWith(
+        expect.objectContaining({ enabled: true, before: 2, after: 1 }),
+      ),
+    );
+    await userEvent.selectOptions(
+      bar.getByRole("combobox", { name: "Onion skin counts by" }),
+      "frames",
+    );
+    fireEvent.change(
+      bar.getByRole("spinbutton", { name: "Onion skin step in frames" }),
+      {
+        target: { value: "2" },
+      },
+    );
+    fireEvent.change(
+      bar.getByRole("spinbutton", { name: "Onion skin after" }),
+      {
+        target: { value: "9" },
+      },
+    );
+    await waitFor(() =>
+      expect(backend.setOnionSkin).toHaveBeenLastCalledWith(
+        expect.objectContaining({ byFrames: true, step: 2, after: 5 }),
+      ),
+    );
+    await userEvent.keyboard("o");
+    expect(useApp.getState().onion.enabled).toBe(false);
   });
 
   it("cancels a tab drag with Escape", async () => {
